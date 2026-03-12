@@ -403,7 +403,7 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
       <div style={{borderBottom:"1px solid #1a2535",padding:"0 24px",background:"#060a0f",position:"sticky",top:0,zIndex:100}}>
         <div style={{maxWidth:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",height:52}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <div className="hd">Omar's<span style={{color:"#cdd6e0"}}> Journal</span></div>
+            <div className="hd">Trading<span style={{color:"#cdd6e0"}}> Journal</span></div>
             <div style={{fontSize:9,color:"#2a3a50",letterSpacing:"0.2em",borderLeft:"1px solid #1a2535",paddingLeft:12}}>NQ · ICT · IFVG</div>
           </div>
           <div style={{display:"flex",gap:2}}>
