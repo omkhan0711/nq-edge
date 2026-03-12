@@ -94,62 +94,107 @@ function AccountCheckboxes({ accounts, selected, onChange, label }) {
 
 function parseTradovateCSV(text) {
   const lines = text.trim().split("\n");
-  const headers = lines[0].split(",").map(h=>h.replace(/"/g,"").trim());
+  const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim());
   const col = name => headers.indexOf(name);
-  const get = (row, name) => (row[col(name)]||"").replace(/"/g,"").trim();
+  const get = (row, name) => (row[col(name)] || "").replace(/"/g, "").trim();
 
   const rows = lines.slice(1).map(line => {
-    const parts=[]; let inQ=false, cur="";
-    for(const ch of line){ if(ch==='"'){inQ=!inQ;}else if(ch===','&&!inQ){parts.push(cur.trim());cur="";}else cur+=ch; }
+    const parts = []; let inQ = false, cur = "";
+    for (const ch of line) { if (ch === '"') { inQ = !inQ; } else if (ch === ',' && !inQ) { parts.push(cur.trim()); cur = ""; } else cur += ch; }
     parts.push(cur.trim()); return parts;
   });
 
-  const filled = rows.filter(r=>get(r,"Status").trim()==="Filled"&&get(r,"Avg Fill Price"));
+  // Only filled orders, sorted by fill time
+  const filled = rows
+    .filter(r => get(r, "Status").trim() === "Filled" && get(r, "Avg Fill Price"))
+    .sort((a, b) => new Date(get(a, "Fill Time")) - new Date(get(b, "Fill Time")));
 
-  const grouped={};
-  filled.forEach(r=>{
-    const acct=get(r,"Account"), date=get(r,"Date");
-    const key=`${date}`;
-    if(!grouped[key])grouped[key]=[];
-    grouped[key].push(r);
+  const trades = [];
+  let position = 0;       // positive = long, negative = short
+  let tradeOrders = [];   // orders in current open trade
+
+  const closeTrade = (orders) => {
+    if (!orders.length) return;
+
+    const contractCode = get(orders[0], "Contract").replace(/[A-Z]\d+$/, "");
+    const multiplier = CONTRACT_MULTIPLIERS[contractCode] || 2;
+
+    const isShort = get(orders[0], "B/S").trim() === "Sell";
+    const entryOrders = orders.filter(r => isShort ? get(r, "B/S").trim() === "Sell" : get(r, "B/S").trim() === "Buy");
+    const exitOrders  = orders.filter(r => isShort ? get(r, "B/S").trim() === "Buy"  : get(r, "B/S").trim() === "Sell");
+
+    // Weighted avg entry
+    let totalEntryQty = 0, totalEntryVal = 0;
+    entryOrders.forEach(r => { const qty = parseFloat(get(r, "Filled Qty")) || 0; const price = parseFloat(get(r, "Avg Fill Price")) || 0; totalEntryQty += qty; totalEntryVal += qty * price; });
+    const avgEntry = totalEntryQty ? totalEntryVal / totalEntryQty : 0;
+
+    // Weighted avg exit
+    let totalExitQty = 0, totalExitVal = 0;
+    exitOrders.forEach(r => { const qty = parseFloat(get(r, "Filled Qty")) || 0; const price = parseFloat(get(r, "Avg Fill Price")) || 0; totalExitQty += qty; totalExitVal += qty * price; });
+    const avgExit = totalExitQty ? totalExitVal / totalExitQty : 0;
+
+    const contracts = Math.min(totalEntryQty, totalExitQty);
+    const pnl = isShort
+      ? (avgEntry - avgExit) * contracts * multiplier
+      : (avgExit - avgEntry) * contracts * multiplier;
+
+    // Date and time from first order
+    const fillTime = get(orders[0], "Fill Time");
+    const timePart = fillTime.split(" ")[1]?.substring(0, 5) || "";
+    const dateParts = fillTime.split(" ")[0]?.split("/") || [];
+    const tradeDate = dateParts.length === 3
+      ? `${dateParts[2]}-${dateParts[0].padStart(2,"0")}-${dateParts[1].padStart(2,"0")}`
+      : new Date().toISOString().split("T")[0];
+
+    // Session detection
+    const hour = parseInt(timePart.split(":")[0]) || 0;
+    let session = "Pre-Market";
+    if (hour >= 3 && hour < 7) session = "London";
+    else if (hour >= 7 && hour < 9) session = "London/NY Overlap";
+    else if (hour >= 9 && hour < 12) session = "New York";
+
+    // SL/TP from canceled orders near this trade
+    const stopOrder = orders.find(r => get(r, "Type").trim() === "Stop" && get(r, "Stop Price"));
+    const limitOrder = orders.find(r => get(r, "Type").trim() === "Limit" && get(r, "Limit Price"));
+
+    trades.push({
+      ...EMPTY,
+      id: Date.now() + Math.random(),
+      date: tradeDate,
+      time: timePart,
+      entry: avgEntry.toFixed(2),
+      exit: avgExit.toFixed(2),
+      stopLoss: stopOrder ? get(stopOrder, "Stop Price") : "",
+      takeProfit: limitOrder ? get(limitOrder, "Limit Price") : "",
+      contracts: String(contracts),
+      pnl: pnl.toFixed(2),
+      outcome: pnl > 0.01 ? "Win" : pnl < -0.01 ? "Loss" : "Breakeven",
+      bias: isShort ? "Bearish" : "Bullish",
+      session,
+      accountIds: [],
+      notes: `Auto-imported · ${contractCode} · ${isShort ? "Short" : "Long"}`,
+    });
+  };
+
+  filled.forEach(r => {
+    const side = get(r, "B/S").trim();
+    const qty = parseFloat(get(r, "Filled Qty")) || 0;
+
+    tradeOrders.push(r);
+
+    if (side === "Buy") position += qty;
+    else position -= qty;
+
+    // Position back to zero = trade complete
+    if (position === 0 && tradeOrders.length > 0) {
+      closeTrade(tradeOrders);
+      tradeOrders = [];
+    }
   });
 
-  const trades=[];
-  Object.entries(grouped).forEach(([dateRaw,orders])=>{
-    const dp=dateRaw.split("/");
-    const tradeDate=dp.length===3?`20${dp[2]}-${dp[0].padStart(2,"0")}-${dp[1].padStart(2,"0")}`:dateRaw;
-    const buys=orders.filter(r=>get(r,"B/S").trim()==="Buy").sort((a,b)=>new Date(get(a,"Fill Time"))-new Date(get(b,"Fill Time")));
-    const sells=orders.filter(r=>get(r,"B/S").trim()==="Sell").sort((a,b)=>new Date(get(a,"Fill Time"))-new Date(get(b,"Fill Time")));
-    const allSorted=[...orders].sort((a,b)=>new Date(get(a,"Fill Time"))-new Date(get(b,"Fill Time")));
-    const isShort=get(allSorted[0],"B/S").trim()==="Sell";
-    const entryOrders=isShort?sells:buys;
-    const exitOrders=isShort?buys:sells;
-    if(!entryOrders.length||!exitOrders.length)return;
+  // Close any remaining open trade
+  if (tradeOrders.length > 0) closeTrade(tradeOrders);
 
-    let totalEntryQty=0,totalEntryVal=0;
-    entryOrders.forEach(r=>{ const qty=parseFloat(get(r,"Filled Qty"))||parseFloat(get(r,"filledQty"))||0; const price=parseFloat(get(r,"Avg Fill Price"))||0; totalEntryQty+=qty; totalEntryVal+=qty*price; });
-    const avgEntry=totalEntryQty?totalEntryVal/totalEntryQty:0;
-
-    let totalExitQty=0,totalExitVal=0;
-    exitOrders.forEach(r=>{ const qty=parseFloat(get(r,"Filled Qty"))||parseFloat(get(r,"filledQty"))||0; const price=parseFloat(get(r,"Avg Fill Price"))||0; totalExitQty+=qty; totalExitVal+=qty*price; });
-    const avgExit=totalExitQty?totalExitVal/totalExitQty:0;
-
-    const contracts=Math.min(totalEntryQty,totalExitQty);
-    const contractCode=get(entryOrders[0],"Contract").replace(/[A-Z]\d+$/,"");
-    const multiplier=CONTRACT_MULTIPLIERS[contractCode]||2;
-    const pnl=isShort?(avgEntry-avgExit)*contracts*multiplier:(avgExit-avgEntry)*contracts*multiplier;
-    const fillTime=get(entryOrders[0],"Fill Time");
-    const timePart=fillTime.split(" ")[1]?.substring(0,5)||"";
-    const hour=parseInt(timePart.split(":")[0])||0;
-    let session="Pre-Market";
-    if(hour>=3&&hour<7)session="London";
-    else if(hour>=7&&hour<9)session="London/NY Overlap";
-    else if(hour>=9&&hour<12)session="New York";
-    const stopOrder=orders.find(r=>get(r,"Type").trim()==="Stop"&&get(r,"Stop Price"));
-    const limitOrder=orders.find(r=>get(r,"Type").trim()==="Limit"&&get(r,"Limit Price"));
-
-    trades.push({ ...EMPTY, id:Date.now()+Math.random(), date:tradeDate, time:timePart, entry:avgEntry.toFixed(2), exit:avgExit.toFixed(2), stopLoss:stopOrder?get(stopOrder,"Stop Price"):"", takeProfit:limitOrder?get(limitOrder,"Limit Price"):"", contracts:String(contracts), pnl:pnl.toFixed(2), outcome:pnl>0?"Win":pnl<0?"Loss":"Breakeven", bias:isShort?"Bearish":"Bullish", session, accountIds:[], notes:`Auto-imported · ${contractCode}` });
-  });
   return trades;
 }
 
