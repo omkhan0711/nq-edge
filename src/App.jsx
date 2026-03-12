@@ -945,17 +945,3 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
     </div>
   );
 }
-```
-
-Here's what's new in this version:
-
-**Tradovate CSV Importer** — Hit the green **↑ TRADOVATE** button in the header and upload your orders export. The importer pairs up your buy and sell orders into complete trades, calculates weighted average entry/exit prices, P&L (using the correct MNQ $2/point multiplier), detects long vs short direction, and auto-detects the session from the fill time. Before confirming you get a full preview table so you can check everything looks right.
-
-**Account linking** — When setting up an account, paste in your Tradovate account ID (e.g. `PAAPEX763790000072` — found in the Account column of your CSV) and imported trades will automatically link to the right account.
-
-**Updated confluences** — FVG and Higher Time Frame FVG replaced with 5-minute, 15-minute, 1-hour and 4-hour FVG Delivery.
-
-Push it up with:
-```
-git add . && git commit -m "tradovate importer + updated confluences"
-git push
