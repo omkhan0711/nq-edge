@@ -9,12 +9,10 @@ const EMOTIONS = ["Calm","Anxious","Confident","Revenge","FOMO","Disciplined","T
 const PROP_FIRMS = ["FTMO","Funded Trading Plus","The Funded Trader","MyForexFunds","E8 Funding","True Forex Funds","Apex Trader Funding","TopStep","Tradovate","Other"];
 const CONFLUENCES = ["IFVG","SMT","Liquidity Sweep","5-minute FVG Delivery","15-minute FVG Delivery","1-hour FVG Delivery","4-hour FVG Delivery","Order Block","Judas Swing","Premium/Discount","Macro"];
 const RR_BUCKETS = ["0.5R","1R","1.5R","2R","2.5R","3R","3.5R","4R","4.5R","5R+"];
+const CONTRACT_MULTIPLIERS = { MNQ:2, NQ:20, MES:5, ES:50 };
 
-// Tradovate contract multipliers ($ per point)
-const CONTRACT_MULTIPLIERS = { MNQ: 2, NQ: 20, MES: 5, ES: 50 };
-
-const EMPTY = { date: new Date().toISOString().split("T")[0], time:"", session:"New York", setup:"IFVG Long", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", notes:"", emotion:"Calm", followedPlan:true, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
-const EMPTY_ACCOUNT = { id:"", name:"", firm:"FTMO", size:"100000", maxDailyDrawdown:"5", maxTotalDrawdown:"10", profitTarget:"10", phase:"Funded", notes:"", tradovateAccount:"" };
+const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", session:"New York", setup:"IFVG Long", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", notes:"", emotion:"Calm", followedPlan:true, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
+const EMPTY_ACCOUNT = { id:"", name:"", firm:"FTMO", size:"100000", startingBalance:"100000", maxDailyDrawdown:"5", maxTotalDrawdown:"10", profitTarget:"10", phase:"Funded", notes:"" };
 
 function useStorage(key, fallback) {
   const [val, setVal] = useState(() => { try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; } catch { return fallback; } });
@@ -24,16 +22,11 @@ function useStorage(key, fallback) {
 
 async function callClaude(messages, systemPrompt) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST", headers: {
-      "Content-Type": "application/json",
-      "x-api-key": import.meta.env.VITE_ANTHROPIC_KEY,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: systemPrompt, messages })
+    method:"POST", headers:{ "Content-Type":"application/json", "x-api-key":import.meta.env.VITE_ANTHROPIC_KEY, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
+    body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000, system:systemPrompt, messages })
   });
   const data = await res.json();
-  return data.content?.map(b => b.text || "").join("") || "";
+  return data.content?.map(b=>b.text||"").join("")||"";
 }
 
 const SEL_STYLE = { width:"100%", background:"#0d1520", border:"1px solid #2a3a50", borderRadius:3, padding:"8px 10px", color:"#cdd6e0", fontSize:12, fontFamily:"inherit", cursor:"pointer", appearance:"none", WebkitAppearance:"none", outline:"none" };
@@ -42,7 +35,7 @@ function Select({ value, onChange, options, style }) {
   return (
     <div style={{ position:"relative" }}>
       <select value={value} onChange={onChange} style={{ ...SEL_STYLE, ...style }}>
-        {options.map(o => typeof o === "string"
+        {options.map(o => typeof o==="string"
           ? <option key={o} value={o} style={{ background:"#0d1520", color:"#cdd6e0" }}>{o}</option>
           : <option key={o.value} value={o.value} style={{ background:"#0d1520", color:"#cdd6e0" }}>{o.label}</option>)}
       </select>
@@ -52,13 +45,13 @@ function Select({ value, onChange, options, style }) {
 }
 
 function ConfluenceCheckboxes({ selected, onChange }) {
-  const toggle = c => onChange(selected.includes(c) ? selected.filter(x => x !== c) : [...selected, c]);
+  const toggle = c => onChange(selected.includes(c) ? selected.filter(x=>x!==c) : [...selected,c]);
   return (
     <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:6 }}>
-      {CONFLUENCES.map(c => (
-        <div key={c} onClick={() => toggle(c)} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:selected.includes(c)?"#0d1a2a":"#060a0f", border:`1px solid ${selected.includes(c)?"#60a5fa":"#1a2535"}`, borderRadius:3, cursor:"pointer", transition:"all 0.15s" }}>
+      {CONFLUENCES.map(c=>(
+        <div key={c} onClick={()=>toggle(c)} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:selected.includes(c)?"#0d1a2a":"#060a0f", border:`1px solid ${selected.includes(c)?"#60a5fa":"#1a2535"}`, borderRadius:3, cursor:"pointer", transition:"all 0.15s" }}>
           <div style={{ width:12, height:12, borderRadius:2, border:`1px solid ${selected.includes(c)?"#60a5fa":"#2a3a50"}`, background:selected.includes(c)?"#60a5fa":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            {selected.includes(c) && <div style={{ width:6, height:6, background:"#060a0f", borderRadius:1 }}/>}
+            {selected.includes(c)&&<div style={{ width:6, height:6, background:"#060a0f", borderRadius:1 }}/>}
           </div>
           <span style={{ fontSize:11, color:selected.includes(c)?"#60a5fa":"#4a6a8a" }}>{c}</span>
         </div>
@@ -67,155 +60,102 @@ function ConfluenceCheckboxes({ selected, onChange }) {
   );
 }
 
-function MultiAccountSelect({ accounts, selected, onChange }) {
-  const toggle = id => onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
+function AccountCheckboxes({ accounts, selected, onChange, label }) {
+  const toggle = id => onChange(selected.includes(id) ? selected.filter(x=>x!==id) : [...selected,id]);
+  const toggleAll = () => onChange(selected.length===accounts.length ? [] : accounts.map(a=>a.id));
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+    <div>
+      {label && <div style={{ fontSize:9, color:"#4a6a8a", letterSpacing:"0.15em", textTransform:"uppercase", marginBottom:8 }}>{label}</div>}
       {!accounts.length
-        ? <div style={{ fontSize:11, color:"#3a5a7a", padding:"8px 10px", background:"#060a0f", border:"1px solid #1a2535", borderRadius:3 }}>No accounts added yet</div>
-        : accounts.map(a => (
-          <div key={a.id} onClick={() => toggle(a.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:selected.includes(a.id)?"#0d1a2a":"#060a0f", border:`1px solid ${selected.includes(a.id)?"#f0b429":"#1a2535"}`, borderRadius:3, cursor:"pointer", transition:"all 0.15s" }}>
-            <div style={{ width:13, height:13, borderRadius:2, border:`1px solid ${selected.includes(a.id)?"#f0b429":"#2a3a50"}`, background:selected.includes(a.id)?"#f0b429":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              {selected.includes(a.id) && <div style={{ width:7, height:7, background:"#060a0f", borderRadius:1 }}/>}
+        ? <div style={{ fontSize:11, color:"#3a5a7a", padding:"10px", background:"#060a0f", border:"1px solid #1a2535", borderRadius:3 }}>No accounts added yet — add accounts first</div>
+        : <>
+          <div onClick={toggleAll} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px", background:"#060a0f", border:"1px solid #1a2535", borderRadius:3, cursor:"pointer", marginBottom:6, transition:"all 0.15s" }}>
+            <div style={{ width:13, height:13, borderRadius:2, border:`1px solid ${selected.length===accounts.length?"#f0b429":"#2a3a50"}`, background:selected.length===accounts.length?"#f0b429":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              {selected.length===accounts.length&&<div style={{ width:7, height:7, background:"#060a0f", borderRadius:1 }}/>}
             </div>
-            <div>
-              <div style={{ fontSize:12, color:selected.includes(a.id)?"#f0b429":"#cdd6e0" }}>{a.name}</div>
-              <div style={{ fontSize:9, color:"#3a5a7a" }}>{a.firm} · {a.phase}{a.tradovateAccount ? ` · ${a.tradovateAccount}` : ""}</div>
-            </div>
+            <span style={{ fontSize:11, color:"#8a9ab8", fontStyle:"italic" }}>Select all accounts</span>
           </div>
-        ))
+          {accounts.map(a=>(
+            <div key={a.id} onClick={()=>toggle(a.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", background:selected.includes(a.id)?"#0d1a2a":"#060a0f", border:`1px solid ${selected.includes(a.id)?"#f0b429":"#1a2535"}`, borderRadius:3, cursor:"pointer", transition:"all 0.15s", marginBottom:5 }}>
+              <div style={{ width:13, height:13, borderRadius:2, border:`1px solid ${selected.includes(a.id)?"#f0b429":"#2a3a50"}`, background:selected.includes(a.id)?"#f0b429":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                {selected.includes(a.id)&&<div style={{ width:7, height:7, background:"#060a0f", borderRadius:1 }}/>}
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:12, color:selected.includes(a.id)?"#f0b429":"#cdd6e0" }}>{a.name}</div>
+                <div style={{ fontSize:9, color:"#3a5a7a" }}>{a.firm} · {a.phase} · ${parseInt(a.startingBalance||a.size).toLocaleString()} starting</div>
+              </div>
+            </div>
+          ))}
+        </>
       }
     </div>
   );
 }
 
-// ── Tradovate CSV Parser ──────────────────────────────────────────────────────
-function parseTradovateCSV(text, accounts) {
+function parseTradovateCSV(text) {
   const lines = text.trim().split("\n");
-  const headers = lines[0].split(",").map(h => h.replace(/"/g,"").trim());
-  
+  const headers = lines[0].split(",").map(h=>h.replace(/"/g,"").trim());
   const col = name => headers.indexOf(name);
-  const get = (row, name) => (row[col(name)] || "").replace(/"/g,"").trim();
+  const get = (row, name) => (row[col(name)]||"").replace(/"/g,"").trim();
 
   const rows = lines.slice(1).map(line => {
-    const parts = [];
-    let inQ = false, cur = "";
-    for (const ch of line) {
-      if (ch === '"') { inQ = !inQ; }
-      else if (ch === "," && !inQ) { parts.push(cur.trim()); cur = ""; }
-      else cur += ch;
-    }
-    parts.push(cur.trim());
-    return parts;
+    const parts=[]; let inQ=false, cur="";
+    for(const ch of line){ if(ch==='"'){inQ=!inQ;}else if(ch===','&&!inQ){parts.push(cur.trim());cur="";}else cur+=ch; }
+    parts.push(cur.trim()); return parts;
   });
 
-  // Only filled orders
-  const filled = rows.filter(r => get(r,"Status").trim() === "Filled" && get(r,"Avg Fill Price"));
+  const filled = rows.filter(r=>get(r,"Status").trim()==="Filled"&&get(r,"Avg Fill Price"));
 
-  // Group by account + date
-  const grouped = {};
-  filled.forEach(r => {
-    const acct = get(r, "Account");
-    const date = get(r, "Date"); // e.g. "3/11/26"
-    const key = `${acct}::${date}`;
-    if (!grouped[key]) grouped[key] = [];
+  const grouped={};
+  filled.forEach(r=>{
+    const acct=get(r,"Account"), date=get(r,"Date");
+    const key=`${date}`;
+    if(!grouped[key])grouped[key]=[];
     grouped[key].push(r);
   });
 
-  const trades = [];
+  const trades=[];
+  Object.entries(grouped).forEach(([dateRaw,orders])=>{
+    const dp=dateRaw.split("/");
+    const tradeDate=dp.length===3?`20${dp[2]}-${dp[0].padStart(2,"0")}-${dp[1].padStart(2,"0")}`:dateRaw;
+    const buys=orders.filter(r=>get(r,"B/S").trim()==="Buy").sort((a,b)=>new Date(get(a,"Fill Time"))-new Date(get(b,"Fill Time")));
+    const sells=orders.filter(r=>get(r,"B/S").trim()==="Sell").sort((a,b)=>new Date(get(a,"Fill Time"))-new Date(get(b,"Fill Time")));
+    const allSorted=[...orders].sort((a,b)=>new Date(get(a,"Fill Time"))-new Date(get(b,"Fill Time")));
+    const isShort=get(allSorted[0],"B/S").trim()==="Sell";
+    const entryOrders=isShort?sells:buys;
+    const exitOrders=isShort?buys:sells;
+    if(!entryOrders.length||!exitOrders.length)return;
 
-  Object.entries(grouped).forEach(([key, orders]) => {
-    const [acctId, dateRaw] = key.split("::");
-    
-    // Parse date
-    const dp = dateRaw.split("/");
-    const tradeDate = dp.length === 3 ? `20${dp[2]}-${dp[0].padStart(2,"0")}-${dp[1].padStart(2,"0")}` : dateRaw;
+    let totalEntryQty=0,totalEntryVal=0;
+    entryOrders.forEach(r=>{ const qty=parseFloat(get(r,"Filled Qty"))||parseFloat(get(r,"filledQty"))||0; const price=parseFloat(get(r,"Avg Fill Price"))||0; totalEntryQty+=qty; totalEntryVal+=qty*price; });
+    const avgEntry=totalEntryQty?totalEntryVal/totalEntryQty:0;
 
-    // Match account to journal account
-    const matchedAccount = accounts.find(a => a.tradovateAccount && a.tradovateAccount.trim() === acctId.trim());
+    let totalExitQty=0,totalExitVal=0;
+    exitOrders.forEach(r=>{ const qty=parseFloat(get(r,"Filled Qty"))||parseFloat(get(r,"filledQty"))||0; const price=parseFloat(get(r,"Avg Fill Price"))||0; totalExitQty+=qty; totalExitVal+=qty*price; });
+    const avgExit=totalExitQty?totalExitVal/totalExitQty:0;
 
-    // Separate buys and sells
-    const buys  = orders.filter(r => get(r,"B/S").trim() === "Buy").sort((a,b) => new Date(get(a,"Fill Time")) - new Date(get(b,"Fill Time")));
-    const sells = orders.filter(r => get(r,"B/S").trim() === "Sell").sort((a,b) => new Date(get(a,"Fill Time")) - new Date(get(b,"Fill Time")));
+    const contracts=Math.min(totalEntryQty,totalExitQty);
+    const contractCode=get(entryOrders[0],"Contract").replace(/[A-Z]\d+$/,"");
+    const multiplier=CONTRACT_MULTIPLIERS[contractCode]||2;
+    const pnl=isShort?(avgEntry-avgExit)*contracts*multiplier:(avgExit-avgEntry)*contracts*multiplier;
+    const fillTime=get(entryOrders[0],"Fill Time");
+    const timePart=fillTime.split(" ")[1]?.substring(0,5)||"";
+    const hour=parseInt(timePart.split(":")[0])||0;
+    let session="Pre-Market";
+    if(hour>=3&&hour<7)session="London";
+    else if(hour>=7&&hour<9)session="London/NY Overlap";
+    else if(hour>=9&&hour<12)session="New York";
+    const stopOrder=orders.find(r=>get(r,"Type").trim()==="Stop"&&get(r,"Stop Price"));
+    const limitOrder=orders.find(r=>get(r,"Type").trim()==="Limit"&&get(r,"Limit Price"));
 
-    // Determine direction: if first order is a sell, it's a short trade
-    const allSorted = [...orders].sort((a,b) => new Date(get(a,"Fill Time")) - new Date(get(b,"Fill Time")));
-    const firstSide = get(allSorted[0], "B/S").trim();
-    const isShort = firstSide === "Sell";
-
-    const entryOrders = isShort ? sells : buys;
-    const exitOrders  = isShort ? buys  : sells;
-
-    if (!entryOrders.length || !exitOrders.length) return;
-
-    // Weighted avg entry
-    let totalEntryQty = 0, totalEntryVal = 0;
-    entryOrders.forEach(r => {
-      const qty = parseFloat(get(r,"Filled Qty")) || parseFloat(get(r,"filledQty")) || 0;
-      const price = parseFloat(get(r,"Avg Fill Price")) || 0;
-      totalEntryQty += qty; totalEntryVal += qty * price;
-    });
-    const avgEntry = totalEntryQty ? totalEntryVal / totalEntryQty : 0;
-
-    // Weighted avg exit
-    let totalExitQty = 0, totalExitVal = 0;
-    exitOrders.forEach(r => {
-      const qty = parseFloat(get(r,"Filled Qty")) || parseFloat(get(r,"filledQty")) || 0;
-      const price = parseFloat(get(r,"Avg Fill Price")) || 0;
-      totalExitQty += qty; totalExitVal += qty * price;
-    });
-    const avgExit = totalExitQty ? totalExitVal / totalExitQty : 0;
-
-    const contracts = Math.min(totalEntryQty, totalExitQty);
-    const contract = get(entryOrders[0], "Contract").replace(/[A-Z]\d+$/, ""); // strip expiry e.g. MNQH6 -> MNQ
-    const multiplier = CONTRACT_MULTIPLIERS[contract] || 2;
-
-    const pnl = isShort
-      ? (avgEntry - avgExit) * contracts * multiplier
-      : (avgExit - avgEntry) * contracts * multiplier;
-
-    // Entry time from first order
-    const fillTime = get(entryOrders[0], "Fill Time"); // e.g. "03/11/2026 08:46:07"
-    const timePart = fillTime.split(" ")[1]?.substring(0,5) || "";
-
-    // Detect session from time
-    const hour = parseInt(timePart.split(":")[0]) || 0;
-    let session = "Pre-Market";
-    if (hour >= 3 && hour < 8) session = "London";
-    else if (hour >= 8 && hour < 12) session = "New York";
-    else if (hour >= 7 && hour < 9) session = "London/NY Overlap";
-
-    // SL from stop orders if present
-    const stopOrder = orders.find(r => get(r,"Type").trim() === "Stop" && get(r,"Stop Price"));
-    const stopLoss = stopOrder ? get(stopOrder, "Stop Price") : "";
-    const limitOrder = orders.find(r => get(r,"Type").trim() === "Limit" && get(r,"Limit Price"));
-    const takeProfit = limitOrder ? get(limitOrder, "Limit Price") : "";
-
-    trades.push({
-      ...EMPTY,
-      id: Date.now() + Math.random(),
-      date: tradeDate,
-      time: timePart,
-      entry: avgEntry.toFixed(2),
-      exit: avgExit.toFixed(2),
-      stopLoss,
-      takeProfit,
-      contracts: String(contracts),
-      pnl: pnl.toFixed(2),
-      outcome: pnl > 0 ? "Win" : pnl < 0 ? "Loss" : "Breakeven",
-      bias: isShort ? "Bearish" : "Bullish",
-      session,
-      accountIds: matchedAccount ? [matchedAccount.id] : [],
-      notes: `Auto-imported from Tradovate · ${contract} · Account: ${acctId}`,
-    });
+    trades.push({ ...EMPTY, id:Date.now()+Math.random(), date:tradeDate, time:timePart, entry:avgEntry.toFixed(2), exit:avgExit.toFixed(2), stopLoss:stopOrder?get(stopOrder,"Stop Price"):"", takeProfit:limitOrder?get(limitOrder,"Limit Price"):"", contracts:String(contracts), pnl:pnl.toFixed(2), outcome:pnl>0?"Win":pnl<0?"Loss":"Breakeven", bias:isShort?"Bearish":"Bullish", session, accountIds:[], notes:`Auto-imported · ${contractCode}` });
   });
-
   return trades;
 }
 
 export default function App() {
-  const [trades, setTrades] = useStorage("nq_trades_v5", []);
-  const [accounts, setAccounts] = useStorage("nq_accounts_v3", []);
+  const [trades, setTrades] = useStorage("nq_trades_v6",[]);
+  const [accounts, setAccounts] = useStorage("nq_accounts_v4",[]);
   const [view, setView] = useState("dashboard");
   const [showForm, setShowForm] = useState(false);
   const [showAccountForm, setShowAccountForm] = useState(false);
@@ -230,42 +170,42 @@ export default function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReviewLoading, setAiReviewLoading] = useState(false);
   const [screenshotPreview, setScreenshotPreview] = useState(null);
-  const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y:d.getFullYear(), m:d.getMonth() }; });
+  const [calMonth, setCalMonth] = useState(()=>{ const d=new Date(); return{y:d.getFullYear(),m:d.getMonth()}; });
   const [toast, setToast] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [importPreview, setImportPreview] = useState(null);
-  const [importFile, setImportFile] = useState(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importSelectedAccounts, setImportSelectedAccounts] = useState([]);
   const fileRef = useRef();
-  const csvRef = useRef();
   const tvRef = useRef();
+  const csvRef = useRef();
 
-  const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
+  const showToast = (msg,type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const saf = (k,v) => setAccountForm(f=>({...f,[k]:v}));
 
   const computeStats = useCallback((tradeList) => {
-    if (!tradeList.length) return null;
-    const wins = tradeList.filter(t=>t.outcome==="Win");
-    const losses = tradeList.filter(t=>t.outcome==="Loss");
-    const nonBE = tradeList.filter(t=>t.outcome!=="Breakeven");
-    const totalPnl = tradeList.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0);
-    const winRate = nonBE.length?(wins.length/nonBE.length)*100:0;
-    const avgWin = wins.length?wins.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0)/wins.length:0;
-    const avgLoss = losses.length?losses.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0)/losses.length:0;
-    const totalWinPnl = wins.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0);
-    const totalLossPnl = Math.abs(losses.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0));
-    const profitFactor = totalLossPnl?totalWinPnl/totalLossPnl:wins.length?999:0;
-    const avgRR = tradeList.filter(t=>t.rr).reduce((s,t)=>s+(parseFloat(t.rr)||0),0)/(tradeList.filter(t=>t.rr).length||1);
-    const sorted = [...tradeList].sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if(!tradeList.length)return null;
+    const wins=tradeList.filter(t=>t.outcome==="Win");
+    const losses=tradeList.filter(t=>t.outcome==="Loss");
+    const nonBE=tradeList.filter(t=>t.outcome!=="Breakeven");
+    const totalPnl=tradeList.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0);
+    const winRate=nonBE.length?(wins.length/nonBE.length)*100:0;
+    const avgWin=wins.length?wins.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0)/wins.length:0;
+    const avgLoss=losses.length?losses.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0)/losses.length:0;
+    const totalWinPnl=wins.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0);
+    const totalLossPnl=Math.abs(losses.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0));
+    const profitFactor=totalLossPnl?totalWinPnl/totalLossPnl:wins.length?999:0;
+    const avgRR=tradeList.filter(t=>t.rr).reduce((s,t)=>s+(parseFloat(t.rr)||0),0)/(tradeList.filter(t=>t.rr).length||1);
+    const sorted=[...tradeList].sort((a,b)=>new Date(a.date)-new Date(b.date));
     let cum=0,peak=0,maxDD=0;
-    const equity = sorted.map(t=>{ cum+=parseFloat(t.pnl)||0; if(cum>peak)peak=cum; const dd=peak-cum; if(dd>maxDD)maxDD=dd; return{date:t.date,value:cum}; });
+    const equity=sorted.map(t=>{ cum+=parseFloat(t.pnl)||0; if(cum>peak)peak=cum; const dd=peak-cum; if(dd>maxDD)maxDD=dd; return{date:t.date,value:cum}; });
     const setupMap={};
     tradeList.forEach(t=>{ if(!setupMap[t.setup])setupMap[t.setup]={wins:0,losses:0,pnl:0,count:0}; setupMap[t.setup].count++; setupMap[t.setup].pnl+=parseFloat(t.pnl)||0; if(t.outcome==="Win")setupMap[t.setup].wins++; if(t.outcome==="Loss")setupMap[t.setup].losses++; });
     const dayMap={};
     tradeList.forEach(t=>{ if(!dayMap[t.date])dayMap[t.date]=0; dayMap[t.date]+=parseFloat(t.pnl)||0; });
     const followedPlanRate=tradeList.filter(t=>t.followedPlan).length/tradeList.length*100;
-    const revSorted=[...sorted].reverse();
-    let streak=0;
+    const revSorted=[...sorted].reverse(); let streak=0;
     for(let i=0;i<revSorted.length;i++){ const t=revSorted[i]; if(i===0){streak=t.outcome==="Win"?1:t.outcome==="Loss"?-1:0;}else{if(t.outcome==="Win"&&streak>0)streak++;else if(t.outcome==="Loss"&&streak<0)streak--;else break;} }
     const rrDist={};
     RR_BUCKETS.forEach(b=>rrDist[b]={count:0,wins:0,losses:0});
@@ -273,22 +213,24 @@ export default function App() {
     const confMap={};
     CONFLUENCES.forEach(c=>confMap[c]={count:0,wins:0,losses:0,pnl:0});
     tradeList.forEach(t=>{ (t.confluences||[]).forEach(c=>{ if(confMap[c]){confMap[c].count++;confMap[c].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")confMap[c].wins++;if(t.outcome==="Loss")confMap[c].losses++;} }); });
-    return { wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,setupMap,maxDD,followedPlanRate,dayMap,streak,rrDist,confMap };
-  }, []);
+    return{wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,setupMap,maxDD,followedPlanRate,dayMap,streak,rrDist,confMap};
+  },[]);
 
-  const stats = useMemo(()=>computeStats(trades),[trades,computeStats]);
-  const accountStats = useMemo(()=>accounts.map(acc=>{
-    const accTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id)||(t.accountId===acc.id));
+  const stats=useMemo(()=>computeStats(trades),[trades,computeStats]);
+
+  const accountStats=useMemo(()=>accounts.map(acc=>{
+    const accTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id));
     const s=computeStats(accTrades);
-    const size=parseFloat(acc.size)||100000;
+    const startBal=parseFloat(acc.startingBalance||acc.size)||100000;
     const pnl=s?.totalPnl||0;
+    const currentBalance=startBal+pnl;
     const ddUsed=s?.maxDD||0;
-    const ddPct=(ddUsed/size)*100;
-    const targetPct=(pnl/size)*100;
-    return{...acc,stats:s,pnl,ddPct,targetPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,targetGoal:parseFloat(acc.profitTarget)||10,size,tradeCount:accTrades.length};
+    const ddPct=(ddUsed/startBal)*100;
+    const targetPct=(pnl/startBal)*100;
+    return{...acc,stats:s,pnl,currentBalance,startBal,ddPct,targetPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,targetGoal:parseFloat(acc.profitTarget)||10,tradeCount:accTrades.length};
   }),[accounts,trades,computeStats]);
 
-  const equityPath = useMemo(()=>{
+  const equityPath=useMemo(()=>{
     const src=selectedAccount?(accountStats.find(a=>a.id===selectedAccount)?.stats?.equity||[]):(stats?.equity||[]);
     if(!src.length)return"";
     const vals=src.map(p=>p.value);
@@ -296,13 +238,13 @@ export default function App() {
     return src.map((p,i)=>{ const x=(i/(src.length-1||1))*400; const y=80-((p.value-minV)/range)*80; return`${i===0?"M":"L"}${x},${y}`; }).join(" ");
   },[stats,accountStats,selectedAccount]);
 
-  const filteredTrades = useMemo(()=>trades.filter(t=>
+  const filteredTrades=useMemo(()=>trades.filter(t=>
     (filterSetup==="All"||t.setup===filterSetup)&&
     (filterOutcome==="All"||t.outcome===filterOutcome)&&
-    (filterAccount==="All"||(t.accountIds||[]).includes(filterAccount)||(t.accountId===filterAccount))
+    (filterAccount==="All"||(t.accountIds||[]).includes(filterAccount))
   ).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,filterSetup,filterOutcome,filterAccount]);
 
-  const handleScreenshot = useCallback(async(file)=>{
+  const handleScreenshot=useCallback(async(file)=>{
     if(!file)return;
     const reader=new FileReader();
     reader.onload=async(e)=>{
@@ -313,7 +255,7 @@ export default function App() {
       try{
         const raw=await callClaude([{role:"user",content:[
           {type:"image",source:{type:"base64",media_type:file.type||"image/png",data:b64}},
-          {type:"text",text:`Analyze this NQ futures TradingView chart. Extract all visible trade data including entry time from the time axis and R multiple from the position tool box.\n\nReturn ONLY valid JSON:\n{"entry":number|null,"stopLoss":number|null,"takeProfit":number|null,"exit":number|null,"time":"HH:MM"|null,"bias":"Bullish"|"Bearish"|"Neutral"|null,"setup":"IFVG Long"|"IFVG Short"|"FVG Long"|"FVG Short"|"OB Long"|"OB Short"|"BPR Long"|"BPR Short"|"Liquidity Sweep"|"MSS"|"Other"|null,"session":"London"|"New York"|"London/NY Overlap"|"Asian"|"Pre-Market"|null,"pnl":number|null,"rr":number|null,"confluences":[],"notes":string|null}`}
+          {type:"text",text:`Analyze this NQ futures TradingView chart. Return ONLY valid JSON:\n{"entry":number|null,"stopLoss":number|null,"takeProfit":number|null,"exit":number|null,"time":"HH:MM"|null,"bias":"Bullish"|"Bearish"|"Neutral"|null,"setup":"IFVG Long"|"IFVG Short"|"FVG Long"|"FVG Short"|"OB Long"|"OB Short"|"BPR Long"|"BPR Short"|"Liquidity Sweep"|"MSS"|"Other"|null,"session":"London"|"New York"|"London/NY Overlap"|"Asian"|"Pre-Market"|null,"pnl":number|null,"rr":number|null,"confluences":[],"notes":string|null}`}
         ]}],"You are an expert NQ futures ICT analyst. Extract trade data from TradingView screenshots. Return only valid JSON, no markdown.");
         const parsed=JSON.parse(raw.replace(/```json|```/g,"").trim());
         setForm(f=>({...f,
@@ -337,7 +279,7 @@ export default function App() {
     reader.readAsDataURL(file);
   },[]);
 
-  const runAiReview = async(trade)=>{
+  const runAiReview=async(trade)=>{
     setAiReviewLoading(true);
     const accs=accounts.filter(a=>(trade.accountIds||[]).includes(a.id));
     try{
@@ -365,30 +307,30 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
     showToast("✓ CSV exported");
   };
 
-  // Tradovate import handler
-  const handleTradovateFile = (file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const parsed = parseTradovateCSV(e.target.result, accounts);
+  const handleTradovateFile=(file)=>{
+    const reader=new FileReader();
+    reader.onload=(e)=>{
+      try{
+        const parsed=parseTradovateCSV(e.target.result);
         setImportPreview(parsed);
-        setImportFile(file.name);
+        setImportFileName(file.name);
+        setImportSelectedAccounts(accounts.map(a=>a.id));
         setShowImportModal(true);
-      } catch(err) {
-        showToast("Could not parse Tradovate file","error");
-      }
+      }catch(err){ showToast("Could not parse Tradovate file","error"); }
     };
     reader.readAsText(file);
   };
 
-  const confirmTradovateImport = () => {
-    if (!importPreview) return;
-    const existing = new Set(trades.map(t => `${t.date}${t.time}${t.entry}`));
-    const newTrades = importPreview.filter(t => !existing.has(`${t.date}${t.time}${t.entry}`));
-    setTrades(prev => [...prev, ...newTrades]);
+  const confirmTradovateImport=()=>{
+    if(!importPreview||!importSelectedAccounts.length){ showToast("Select at least one account","warn"); return; }
+    const existing=new Set(trades.map(t=>`${t.date}${t.time}${t.entry}`));
+    const newTrades=importPreview
+      .filter(t=>!existing.has(`${t.date}${t.time}${t.entry}`))
+      .map(t=>({ ...t, id:Date.now()+Math.random(), accountIds:[...importSelectedAccounts] }));
+    setTrades(prev=>[...prev,...newTrades]);
     setShowImportModal(false);
     setImportPreview(null);
-    showToast(`✓ Imported ${newTrades.length} trades from Tradovate`);
+    showToast(`✓ Imported ${newTrades.length} trades across ${importSelectedAccounts.length} accounts`);
   };
 
   const handleSubmit=()=>{
@@ -437,7 +379,7 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
         .it{background:#0d1a2a;color:#60a5fa;border:1px solid #1a3050}
         .ct{background:#0d1a1a;color:#34d399;border:1px solid #0a3030;font-size:9px;padding:2px 6px;border-radius:2px}
         .overlay{position:fixed;inset:0;background:rgba(6,10,15,0.93);backdrop-filter:blur(8px);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto}
-        .modal{background:#0a0f18;border:1px solid #2a3a50;border-radius:6px;width:100%;max-width:740px;padding:28px;margin:auto}
+        .modal{background:#0a0f18;border:1px solid #2a3a50;border-radius:6px;width:100%;max-width:860px;padding:28px;margin:auto}
         .dz{border:1px dashed #2a3a50;border-radius:4px;padding:24px;text-align:center;cursor:pointer;transition:all 0.2s;background:#060a0f}
         .dz:hover{border-color:#f0b429;background:#0a0f18}
         .toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:3px;font-size:11px;letter-spacing:0.08em;z-index:999;animation:si 0.2s ease}
@@ -451,6 +393,8 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
         .nav-active{background:#0d1520;color:#f0b429;border:1px solid #2a3a50}
         .nav-inactive{background:transparent;color:#4a6a8a;border:1px solid transparent}
         .import-row:hover{background:#0d1520}
+        .split-modal{display:grid;grid-template-columns:1fr 320px;gap:20px}
+        @media(max-width:700px){.split-modal{grid-template-columns:1fr}}
       `}</style>
 
       {toast&&<div className="toast" style={{background:toast.type==="error"?"#1a0808":toast.type==="warn"?"#1a1208":"#081a0e",border:`1px solid ${toast.type==="error"?"#5a1a1a":toast.type==="warn"?"#5a4a0a":"#1a5a2a"}`,color:toast.type==="error"?"#f87171":toast.type==="warn"?"#f0b429":"#4ade80"}}>{toast.msg}</div>}
@@ -469,7 +413,7 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
           </div>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
             <button className="np dim" onClick={exportCSV}>↓ CSV</button>
-            <label className="np teal" style={{cursor:"pointer"}} title="Import Tradovate Orders CSV">
+            <label className="np teal" style={{cursor:"pointer"}}>
               ↑ TRADOVATE
               <input ref={tvRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>e.target.files[0]&&handleTradovateFile(e.target.files[0])}/>
             </label>
@@ -537,17 +481,20 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
                       {equityPath&&<><path d={equityPath+" L400,80 L0,80 Z"} fill="url(#eqg)"/><path d={equityPath} fill="none" stroke={(activeStats?.totalPnl||0)>=0?"#4ade80":"#f87171"} strokeWidth="1.5"/></>}
                     </svg>
                   </div>
-                  <div className="card">
+                  <div className="card" style={{overflowY:"auto",maxHeight:220}}>
                     <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:12}}>ACCOUNTS</div>
                     {!accounts.length?<div style={{color:"#3a5a7a",fontSize:11}}>No accounts added</div>:accountStats.map(a=>(
                       <div key={a.id} style={{marginBottom:14,paddingBottom:14,borderBottom:"1px solid #0d1520"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                           <div><div style={{fontSize:11,color:"#cdd6e0"}}>{a.name}</div><div style={{fontSize:9,color:"#3a5a7a"}}>{a.firm} · {a.phase}</div></div>
-                          <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:a.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(a.pnl)}</div>
+                          <div style={{textAlign:"right"}}>
+                            <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:a.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(a.pnl)}</div>
+                            <div style={{fontSize:9,color:"#3a5a7a"}}>Bal: ${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+                          </div>
                         </div>
                         <div style={{fontSize:9,color:"#3a5a7a",marginBottom:3}}>DD {a.ddPct.toFixed(1)}% / {a.ddLimit}%</div>
                         <div className="meter-bg"><div style={{width:`${Math.min(100,(a.ddPct/a.ddLimit)*100)}%`,height:"100%",background:a.ddPct/a.ddLimit>0.7?"#f87171":a.ddPct/a.ddLimit>0.4?"#f0b429":"#4ade80",borderRadius:2}}/></div>
-                        <div style={{fontSize:9,color:"#3a5a7a",marginTop:6,marginBottom:3}}>TARGET {a.targetPct.toFixed(1)}% / {a.targetGoal}%</div>
+                        <div style={{fontSize:9,color:"#3a5a7a",marginTop:5,marginBottom:3}}>TARGET {a.targetPct.toFixed(1)}% / {a.targetGoal}%</div>
                         <div className="meter-bg"><div style={{width:`${Math.min(100,(a.targetPct/a.targetGoal)*100)}%`,height:"100%",background:"#60a5fa",borderRadius:2}}/></div>
                       </div>
                     ))}
@@ -571,23 +518,26 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
                 <button className="np gold" onClick={()=>setShowAccountForm(true)} style={{padding:"10px 24px"}}>ADD YOUR FIRST ACCOUNT</button>
               </div>
             ):(
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
                 {accountStats.map((a,i)=>{
                   const ddColor=a.ddPct/a.ddLimit>0.7?"#f87171":a.ddPct/a.ddLimit>0.4?"#f0b429":"#4ade80";
                   return(
                     <div key={a.id} className="card" style={{padding:20}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
                         <div>
-                          <div style={{fontFamily:"'Orbitron'",fontSize:14,fontWeight:900,color:"#cdd6e0",marginBottom:3}}>{a.name}</div>
-                          <div style={{fontSize:10,color:"#4a6a8a"}}>{a.firm} · <span style={{color:"#60a5fa"}}>{a.phase}</span> · ${parseInt(a.size).toLocaleString()}</div>
-                          {a.tradovateAccount&&<div style={{fontSize:9,color:"#34d399",marginTop:3}}>Tradovate: {a.tradovateAccount}</div>}
+                          <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:"#cdd6e0",marginBottom:3}}>{a.name}</div>
+                          <div style={{fontSize:10,color:"#4a6a8a"}}>{a.firm} · <span style={{color:"#60a5fa"}}>{a.phase}</span></div>
                         </div>
-                        <div style={{fontFamily:"'Orbitron'",fontSize:20,fontWeight:900,color:a.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(a.pnl)}</div>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontFamily:"'Orbitron'",fontSize:18,fontWeight:900,color:a.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(a.pnl)}</div>
+                          <div style={{fontSize:9,color:"#3a5a7a",marginTop:2}}>Balance: <span style={{color:"#cdd6e0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span></div>
+                          <div style={{fontSize:9,color:"#3a5a7a"}}>Started: <span style={{color:"#4a6a8a"}}>${a.startBal.toLocaleString()}</span></div>
+                        </div>
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
                         {[["TRADES",a.tradeCount,"#cdd6e0"],["WIN RATE",a.stats?`${a.stats.winRate.toFixed(0)}%`:"—",a.stats?.winRate>=50?"#4ade80":"#f87171"],["AVG R:R",a.stats?`${a.stats.avgRR.toFixed(1)}R`:"—","#60a5fa"]].map(([l,v,c])=>(
                           <div key={l} style={{background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"8px 10px"}}>
-                            <div style={{fontSize:8,color:"#3a5a7a",letterSpacing:"0.12em",marginBottom:4}}>{l}</div>
+                            <div style={{fontSize:8,color:"#3a5a7a",letterSpacing:"0.1em",marginBottom:4}}>{l}</div>
                             <div style={{fontFamily:"'Orbitron'",fontSize:14,fontWeight:900,color:c}}>{v}</div>
                           </div>
                         ))}
@@ -698,16 +648,14 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
                     );
                   })}
                 </div>
-
                 <div className="card" style={{marginBottom:12}}>
                   <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:14}}>R:R DISTRIBUTION</div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
                     {RR_BUCKETS.map(b=>{
-                      const d=stats.rrDist[b];
-                      const wr=d.count?(d.wins/d.count)*100:0;
+                      const d=stats.rrDist[b];const wr=d.count?(d.wins/d.count)*100:0;
                       return(
                         <div key={b} style={{background:"#060a0f",border:`1px solid ${d.count>0?"#2a3a50":"#1a2535"}`,borderRadius:3,padding:"10px 8px",textAlign:"center"}}>
-                          <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:d.count>0?"#f0b429":"#2a3a50",marginBottom:4}}>{b}</div>
+                          <div style={{fontFamily:"'Orbitron'",fontSize:12,fontWeight:900,color:d.count>0?"#f0b429":"#2a3a50",marginBottom:4}}>{b}</div>
                           <div style={{fontSize:18,fontFamily:"'Orbitron'",fontWeight:900,color:wr>=50?"#4ade80":d.count>0?"#f87171":"#2a3a50"}}>{d.count}</div>
                           <div style={{fontSize:9,color:"#3a5a7a",marginTop:3}}>{d.count>0?`${wr.toFixed(0)}% WR`:"—"}</div>
                           {d.count>0&&<div style={{marginTop:6}}><div className="meter-bg"><div style={{width:`${wr}%`,height:"100%",background:wr>=50?"#4ade80":"#f87171",borderRadius:2}}/></div></div>}
@@ -716,7 +664,6 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
                     })}
                   </div>
                 </div>
-
                 <div className="card" style={{marginBottom:12}}>
                   <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:14}}>CONFLUENCE PERFORMANCE</div>
                   {Object.entries(stats.confMap).filter(([,d])=>d.count>0).sort((a,b)=>b[1].pnl-a[1].pnl).map(([conf,d])=>{
@@ -736,7 +683,6 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
                   })}
                   {!Object.values(stats.confMap).some(d=>d.count>0)&&<div style={{color:"#3a5a7a",fontSize:11}}>No confluence data yet</div>}
                 </div>
-
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                   <div className="card">
                     <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:12}}>SESSION BREAKDOWN</div>
@@ -798,8 +744,7 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
                 {Array.from({length:calDays.total}).map((_,i)=>{
                   const day=i+1;
                   const ds=`${calMonth.y}-${String(calMonth.m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-                  const dp=stats?.dayMap?.[ds];
-                  const ht=dp!==undefined;
+                  const dp=stats?.dayMap?.[ds];const ht=dp!==undefined;
                   const today=new Date().toISOString().split("T")[0]===ds;
                   return<div key={day} style={{aspectRatio:"1",padding:4,border:`1px solid ${today?"#f0b429":ht?(dp>=0?"rgba(74,222,128,0.3)":"rgba(248,113,113,0.3)"):"#1a2535"}`,borderRadius:3,background:ht?(dp>=0?"rgba(74,222,128,0.06)":"rgba(248,113,113,0.06)"):"#0a0f18",minHeight:52}}>
                     <div style={{fontSize:9,color:today?"#f0b429":"#2a3a50",marginBottom:2}}>{day}</div>
@@ -812,54 +757,71 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
         )}
       </div>
 
-      {/* TRADOVATE IMPORT PREVIEW MODAL */}
+      {/* TRADOVATE IMPORT MODAL */}
       {showImportModal&&importPreview&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowImportModal(false);}}>
-          <div className="modal" style={{maxWidth:860}}>
+          <div className="modal">
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
               <div>
-                <div className="shd">TRADOVATE IMPORT PREVIEW</div>
-                <div style={{fontSize:10,color:"#3a5a7a",marginTop:4}}>{importFile} · {importPreview.length} trades detected</div>
+                <div className="shd">IMPORT TRADES</div>
+                <div style={{fontSize:10,color:"#3a5a7a",marginTop:4}}>{importFileName} · {importPreview.length} trades detected</div>
               </div>
               <button onClick={()=>setShowImportModal(false)} style={{background:"none",border:"none",color:"#4a6a8a",fontSize:20,cursor:"pointer"}}>✕</button>
             </div>
-            {!accounts.some(a=>a.tradovateAccount) && (
-              <div style={{background:"#1a1208",border:"1px solid #5a4a0a",borderRadius:3,padding:"10px 14px",marginBottom:16,fontSize:11,color:"#f0b429"}}>
-                ⚠ Tip: Add your Tradovate account ID to your accounts (e.g. PAAPEX763790000072) so trades auto-link to the right account.
-              </div>
-            )}
-            <div style={{overflowX:"auto",marginBottom:20}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                <thead><tr style={{borderBottom:"1px solid #1a2535",color:"#3a5a7a"}}>
-                  {["Date","Time","Bias","Entry","Exit","SL","TP","Contracts","P&L","Session","Account"].map(h=>(
-                    <th key={h} style={{padding:"6px 10px",fontWeight:400,letterSpacing:"0.08em",fontSize:9,textAlign:"left"}}>{h}</th>
-                  ))}
-                </tr></thead>
-                <tbody>
-                  {importPreview.map((t,i)=>{
-                    const pnl=parseFloat(t.pnl)||0;
-                    const accs=accounts.filter(a=>(t.accountIds||[]).includes(a.id));
-                    return(
-                      <tr key={i} className="import-row" style={{borderBottom:"1px solid #0d1117",transition:"background 0.1s"}}>
-                        <td style={{padding:"7px 10px"}}>{t.date}</td>
-                        <td style={{padding:"7px 10px",color:"#60a5fa"}}>{t.time}</td>
-                        <td style={{padding:"7px 10px",color:t.bias==="Bullish"?"#4ade80":"#f87171"}}>● {t.bias}</td>
-                        <td style={{padding:"7px 10px"}}>{t.entry}</td>
-                        <td style={{padding:"7px 10px"}}>{t.exit}</td>
-                        <td style={{padding:"7px 10px",color:"#f87171"}}>{t.stopLoss||"—"}</td>
-                        <td style={{padding:"7px 10px",color:"#4ade80"}}>{t.takeProfit||"—"}</td>
-                        <td style={{padding:"7px 10px"}}>{t.contracts}</td>
-                        <td style={{padding:"7px 10px",fontFamily:"'Orbitron'",fontSize:12,fontWeight:900,color:pnl>=0?"#4ade80":"#f87171"}}>{fmt$(pnl)}</td>
-                        <td style={{padding:"7px 10px",color:"#4a6a8a"}}>{t.session}</td>
-                        <td style={{padding:"7px 10px",color:"#f0b429"}}>{accs.length?accs.map(a=>a.name).join(", "):<span style={{color:"#3a5a7a"}}>unlinked</span>}</td>
+
+            <div className="split-modal">
+              {/* Left: trade preview */}
+              <div>
+                <div style={{fontSize:9,color:"#4a6a8a",letterSpacing:"0.15em",marginBottom:10}}>DETECTED TRADES</div>
+                <div style={{overflowX:"auto",maxHeight:380,overflowY:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                    <thead style={{position:"sticky",top:0,background:"#0a0f18"}}>
+                      <tr style={{borderBottom:"1px solid #1a2535",color:"#3a5a7a"}}>
+                        {["Date","Time","Dir","Entry","Exit","Qty","P&L"].map(h=>(
+                          <th key={h} style={{padding:"6px 8px",fontWeight:400,letterSpacing:"0.08em",fontSize:9,textAlign:"left"}}>{h}</th>
+                        ))}
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {importPreview.map((t,i)=>{
+                        const pnl=parseFloat(t.pnl)||0;
+                        return(
+                          <tr key={i} className="import-row" style={{borderBottom:"1px solid #0d1117"}}>
+                            <td style={{padding:"6px 8px"}}>{t.date}</td>
+                            <td style={{padding:"6px 8px",color:"#60a5fa"}}>{t.time}</td>
+                            <td style={{padding:"6px 8px",color:t.bias==="Bullish"?"#4ade80":"#f87171"}}>{t.bias==="Bullish"?"▲":"▼"}</td>
+                            <td style={{padding:"6px 8px"}}>{t.entry}</td>
+                            <td style={{padding:"6px 8px"}}>{t.exit}</td>
+                            <td style={{padding:"6px 8px",color:"#4a6a8a"}}>{t.contracts}</td>
+                            <td style={{padding:"6px 8px",fontFamily:"'Orbitron'",fontSize:11,fontWeight:900,color:pnl>=0?"#4ade80":"#f87171"}}>{fmt$(pnl)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Right: account selector */}
+              <div>
+                <AccountCheckboxes
+                  accounts={accounts}
+                  selected={importSelectedAccounts}
+                  onChange={setImportSelectedAccounts}
+                  label="Apply to accounts"
+                />
+                {importSelectedAccounts.length>0&&(
+                  <div style={{marginTop:12,background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"10px 12px",fontSize:10,color:"#4a6a8a"}}>
+                    {importPreview.length} trades will be logged across <span style={{color:"#f0b429"}}>{importSelectedAccounts.length} account{importSelectedAccounts.length>1?"s":""}</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={confirmTradovateImport} className="np teal" style={{flex:1,padding:11}}>CONFIRM IMPORT {importPreview.length} TRADES</button>
+
+            <div style={{display:"flex",gap:8,marginTop:20}}>
+              <button onClick={confirmTradovateImport} className="np teal" style={{flex:1,padding:11}} disabled={!importSelectedAccounts.length}>
+                CONFIRM IMPORT → {importSelectedAccounts.length} ACCOUNT{importSelectedAccounts.length!==1?"S":""}
+              </button>
               <button onClick={()=>setShowImportModal(false)} className="np dim" style={{padding:"11px 22px"}}>CANCEL</button>
             </div>
           </div>
@@ -869,7 +831,7 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
       {/* ACCOUNT MODAL */}
       {showAccountForm&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget){setShowAccountForm(false);setEditAccountIdx(null);}}}>
-          <div className="modal">
+          <div className="modal" style={{maxWidth:600}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
               <div className="shd">{editAccountIdx!==null?"EDIT ACCOUNT":"ADD ACCOUNT"}</div>
               <button onClick={()=>{setShowAccountForm(false);setEditAccountIdx(null);}} style={{background:"none",border:"none",color:"#4a6a8a",fontSize:20,cursor:"pointer"}}>✕</button>
@@ -877,17 +839,13 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <div style={{gridColumn:"1/-1"}}><label style={lbl}>Account Name</label><input value={accountForm.name} onChange={e=>saf("name",e.target.value)} style={inp} placeholder='e.g. "FTMO 100K #1"'/></div>
               <div><label style={lbl}>Prop Firm</label><Select value={accountForm.firm} onChange={e=>saf("firm",e.target.value)} options={PROP_FIRMS}/></div>
-              <div><label style={lbl}>Account Size ($)</label><input type="number" value={accountForm.size} onChange={e=>saf("size",e.target.value)} style={inp}/></div>
-              <div><label style={lbl}>Max Daily Drawdown (%)</label><input type="number" value={accountForm.maxDailyDrawdown} onChange={e=>saf("maxDailyDrawdown",e.target.value)} style={inp}/></div>
-              <div><label style={lbl}>Max Total Drawdown (%)</label><input type="number" value={accountForm.maxTotalDrawdown} onChange={e=>saf("maxTotalDrawdown",e.target.value)} style={inp}/></div>
-              <div><label style={lbl}>Profit Target (%)</label><input type="number" value={accountForm.profitTarget} onChange={e=>saf("profitTarget",e.target.value)} style={inp}/></div>
               <div><label style={lbl}>Phase</label><Select value={accountForm.phase} onChange={e=>saf("phase",e.target.value)} options={["Phase 1","Phase 2","Funded","Verification"]}/></div>
-              <div style={{gridColumn:"1/-1"}}>
-                <label style={lbl}>Tradovate Account ID (for auto-import linking)</label>
-                <input value={accountForm.tradovateAccount||""} onChange={e=>saf("tradovateAccount",e.target.value)} style={inp} placeholder="e.g. PAAPEX763790000072"/>
-                <div style={{fontSize:9,color:"#3a5a7a",marginTop:4}}>Find this in your Tradovate orders CSV under the "Account" column</div>
-              </div>
-              <div style={{gridColumn:"1/-1"}}><label style={lbl}>Notes</label><input value={accountForm.notes} onChange={e=>saf("notes",e.target.value)} style={inp}/></div>
+              <div><label style={lbl}>Account Size ($)</label><input type="number" value={accountForm.size} onChange={e=>saf("size",e.target.value)} style={inp} placeholder="100000"/></div>
+              <div><label style={lbl}>Starting Balance ($)</label><input type="number" value={accountForm.startingBalance} onChange={e=>saf("startingBalance",e.target.value)} style={inp} placeholder="100000"/></div>
+              <div><label style={lbl}>Max Daily Drawdown (%)</label><input type="number" value={accountForm.maxDailyDrawdown} onChange={e=>saf("maxDailyDrawdown",e.target.value)} style={inp} placeholder="5"/></div>
+              <div><label style={lbl}>Max Total Drawdown (%)</label><input type="number" value={accountForm.maxTotalDrawdown} onChange={e=>saf("maxTotalDrawdown",e.target.value)} style={inp} placeholder="10"/></div>
+              <div style={{gridColumn:"1/-1"}}><label style={lbl}>Profit Target (%)</label><input type="number" value={accountForm.profitTarget} onChange={e=>saf("profitTarget",e.target.value)} style={inp} placeholder="10"/></div>
+              <div style={{gridColumn:"1/-1"}}><label style={lbl}>Notes</label><input value={accountForm.notes} onChange={e=>saf("notes",e.target.value)} style={inp} placeholder="Any notes about this account..."/></div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:20}}>
               <button onClick={handleAccountSubmit} className="np gold" style={{flex:1,padding:11}}>{editAccountIdx!==null?"UPDATE":"ADD ACCOUNT"}</button>
@@ -900,7 +858,7 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
       {/* TRADE MODAL */}
       {showForm&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget){setShowForm(false);setEditIdx(null);}}}>
-          <div className="modal">
+          <div className="modal" style={{maxWidth:740}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
               <div className="shd">{editIdx!==null?"EDIT TRADE":"LOG TRADE"}</div>
               <button onClick={()=>{setShowForm(false);setEditIdx(null);}} style={{background:"none",border:"none",color:"#4a6a8a",fontSize:20,cursor:"pointer"}}>✕</button>
@@ -908,12 +866,11 @@ Provide concise review: (1) Setup quality (2) Confluence strength (3) Execution 
             <div className="dz" style={{marginBottom:16}} onClick={()=>!aiLoading&&fileRef.current?.click()} onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor="#f0b429";}} onDragLeave={e=>{e.currentTarget.style.borderColor="#2a3a50";}} onDrop={e=>{e.preventDefault();e.currentTarget.style.borderColor="#2a3a50";const f=e.dataTransfer.files[0];if(f)handleScreenshot(f);}}>
               {screenshotPreview?<div style={{position:"relative"}}><img src={screenshotPreview} alt="chart" style={{maxHeight:160,objectFit:"contain",borderRadius:3,width:"100%"}}/><div style={{position:"absolute",top:6,right:6,background:"#060a0f",border:"1px solid #1a2535",borderRadius:2,padding:"2px 8px",fontSize:9,color:"#4ade80"}}>✓ CHART ATTACHED</div></div>
               :aiLoading?<div className="pulse" style={{color:"#f0b429",fontSize:12,letterSpacing:"0.15em"}}>🤖 AI EXTRACTING TRADE LEVELS...</div>
-              :<><div style={{fontSize:22,marginBottom:6}}>📊</div><div style={{color:"#4a6a8a",fontSize:12}}>Drop TradingView screenshot · AI auto-extracts Entry, SL, TP, Time & R</div></>}
+              :<><div style={{fontSize:22,marginBottom:6}}>📊</div><div style={{color:"#4a6a8a",fontSize:12}}>Drop TradingView screenshot · AI auto-extracts Entry, SL, TP, Time and R</div></>}
               <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>e.target.files[0]&&handleScreenshot(e.target.files[0])}/>
             </div>
             <div style={{marginBottom:12}}>
-              <label style={lbl}>Accounts (select all that apply)</label>
-              <MultiAccountSelect accounts={accounts} selected={form.accountIds||[]} onChange={v=>sf("accountIds",v)}/>
+              <AccountCheckboxes accounts={accounts} selected={form.accountIds||[]} onChange={v=>sf("accountIds",v)} label="Accounts (select all that apply)"/>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               {[["Date","date","date"],["Time","time","time"],["Entry Price","entry","number"],["Exit Price","exit","number"],["Stop Loss","stopLoss","number"],["Take Profit","takeProfit","number"],["Contracts","contracts","number"],["P&L ($)","pnl","number"],["R:R Achieved","rr","number"]].map(([l,k,t])=>(
