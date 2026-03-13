@@ -11,10 +11,11 @@ const DEFAULT_FIRMS = ["FTMO","Funded Trading Plus","The Funded Trader","MyForex
 const BE_TOLERANCE = 0.20;
 const TIME_SLOTS = [];
 for (let h=9;h<=10;h++) for (let m=0;m<60;m+=5) { if(h===10&&m>30)break; TIME_SLOTS.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`); }
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", risk:"250", notes:"", emotion:"Calm", followedPlan:true, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
-const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"" };
-const EMPTY_TRANSACTION = { id:"", type:"expense", amount:"", date:new Date().toISOString().split("T")[0], notes:"" };
+const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false };
+const EMPTY_TRANSACTION = { id:"", type:"expense", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"" };
 
 function useStorage(key, fallback) {
   const [val, setVal] = useState(() => { try { const s=localStorage.getItem(key); return s?JSON.parse(s):fallback; } catch { return fallback; } });
@@ -59,17 +60,16 @@ function FirmInput({ value, onChange, firms }) {
   const filtered = [...new Set([...DEFAULT_FIRMS, ...firms])].filter(f => f.toLowerCase().includes(input.toLowerCase()) && f !== input);
   return (
     <div ref={ref} style={{ position:"relative" }}>
-      <input value={input} onChange={e => { setInput(e.target.value); onChange(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
+      <input value={input} onChange={e=>{ setInput(e.target.value); onChange(e.target.value); setOpen(true); }} onFocus={()=>setOpen(true)}
         style={{ width:"100%", background:"#0d1520", border:"1px solid #2a3a50", borderRadius:3, padding:"8px 10px", color:"#cdd6e0", fontSize:12, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
-        placeholder="Type or select prop firm..." />
+        placeholder="Type or select prop firm..."/>
       {open && filtered.length > 0 && (
         <div style={{ position:"absolute", top:"100%", left:0, right:0, background:"#0d1520", border:"1px solid #2a3a50", borderRadius:3, zIndex:300, maxHeight:160, overflowY:"auto" }}>
           {filtered.map(f => (
-            <div key={f} onClick={() => { setInput(f); onChange(f); setOpen(false); }}
+            <div key={f} onClick={()=>{ setInput(f); onChange(f); setOpen(false); }}
               style={{ padding:"8px 12px", fontSize:12, color:"#cdd6e0", cursor:"pointer", borderBottom:"1px solid #1a2535" }}
-              onMouseEnter={e => e.currentTarget.style.background="#1a2535"}
-              onMouseLeave={e => e.currentTarget.style.background="transparent"}>{f}</div>
+              onMouseEnter={e=>e.currentTarget.style.background="#1a2535"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{f}</div>
           ))}
         </div>
       )}
@@ -82,9 +82,9 @@ function ConfluenceCheckboxes({ selected, onChange, confluences }) {
   return (
     <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:6 }}>
       {confluences.map(c => (
-        <div key={c} onClick={() => toggle(c)} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:selected.includes(c)?"#0d1a2a":"#060a0f", border:`1px solid ${selected.includes(c)?"#60a5fa":"#1a2535"}`, borderRadius:3, cursor:"pointer", transition:"all 0.15s" }}>
+        <div key={c} onClick={()=>toggle(c)} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:selected.includes(c)?"#0d1a2a":"#060a0f", border:`1px solid ${selected.includes(c)?"#60a5fa":"#1a2535"}`, borderRadius:3, cursor:"pointer", transition:"all 0.15s" }}>
           <div style={{ width:12, height:12, borderRadius:2, border:`1px solid ${selected.includes(c)?"#60a5fa":"#2a3a50"}`, background:selected.includes(c)?"#60a5fa":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            {selected.includes(c) && <div style={{ width:6, height:6, background:"#060a0f", borderRadius:1 }}/>}
+            {selected.includes(c)&&<div style={{ width:6, height:6, background:"#060a0f", borderRadius:1 }}/>}
           </div>
           <span style={{ fontSize:11, color:selected.includes(c)?"#60a5fa":"#4a6a8a" }}>{c}</span>
         </div>
@@ -96,22 +96,23 @@ function ConfluenceCheckboxes({ selected, onChange, confluences }) {
 function AccountCheckboxes({ accounts, selected, onChange, label }) {
   const toggle = id => onChange(selected.includes(id) ? selected.filter(x=>x!==id) : [...selected,id]);
   const toggleAll = () => onChange(selected.length===accounts.length ? [] : accounts.map(a=>a.id));
+  const active = accounts.filter(a=>!a.dormant);
   return (
     <div>
       {label && <div style={{ fontSize:9, color:"#4a6a8a", letterSpacing:"0.15em", textTransform:"uppercase", marginBottom:8 }}>{label}</div>}
-      {!accounts.length
-        ? <div style={{ fontSize:11, color:"#3a5a7a", padding:"10px", background:"#060a0f", border:"1px solid #1a2535", borderRadius:3 }}>No accounts added yet</div>
+      {!active.length
+        ? <div style={{ fontSize:11, color:"#3a5a7a", padding:"10px", background:"#060a0f", border:"1px solid #1a2535", borderRadius:3 }}>No active accounts</div>
         : <>
           <div onClick={toggleAll} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px", background:"#060a0f", border:"1px solid #1a2535", borderRadius:3, cursor:"pointer", marginBottom:6 }}>
-            <div style={{ width:13, height:13, borderRadius:2, border:`1px solid ${selected.length===accounts.length?"#f0b429":"#2a3a50"}`, background:selected.length===accounts.length?"#f0b429":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              {selected.length===accounts.length && <div style={{ width:7, height:7, background:"#060a0f", borderRadius:1 }}/>}
+            <div style={{ width:13, height:13, borderRadius:2, border:`1px solid ${selected.length===active.length?"#f0b429":"#2a3a50"}`, background:selected.length===active.length?"#f0b429":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              {selected.length===active.length&&<div style={{ width:7, height:7, background:"#060a0f", borderRadius:1 }}/>}
             </div>
             <span style={{ fontSize:11, color:"#8a9ab8", fontStyle:"italic" }}>Select all accounts</span>
           </div>
-          {accounts.map(a => (
-            <div key={a.id} onClick={() => toggle(a.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", background:selected.includes(a.id)?"#0d1a2a":"#060a0f", border:`1px solid ${selected.includes(a.id)?"#f0b429":"#1a2535"}`, borderRadius:3, cursor:"pointer", transition:"all 0.15s", marginBottom:5 }}>
+          {active.map(a => (
+            <div key={a.id} onClick={()=>toggle(a.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", background:selected.includes(a.id)?"#0d1a2a":"#060a0f", border:`1px solid ${selected.includes(a.id)?"#f0b429":"#1a2535"}`, borderRadius:3, cursor:"pointer", transition:"all 0.15s", marginBottom:5 }}>
               <div style={{ width:13, height:13, borderRadius:2, border:`1px solid ${selected.includes(a.id)?"#f0b429":"#2a3a50"}`, background:selected.includes(a.id)?"#f0b429":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                {selected.includes(a.id) && <div style={{ width:7, height:7, background:"#060a0f", borderRadius:1 }}/>}
+                {selected.includes(a.id)&&<div style={{ width:7, height:7, background:"#060a0f", borderRadius:1 }}/>}
               </div>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:12, color:selected.includes(a.id)?"#f0b429":"#cdd6e0" }}>{a.name}</div>
@@ -144,21 +145,19 @@ function parseTradovateCSV(text) {
     const isShort=get(orders[0],"B/S").trim()==="Sell";
     const entryOrders=orders.filter(r=>isShort?get(r,"B/S").trim()==="Sell":get(r,"B/S").trim()==="Buy");
     const exitOrders=orders.filter(r=>isShort?get(r,"B/S").trim()==="Buy":get(r,"B/S").trim()==="Sell");
-    let totalEntryQty=0,totalEntryVal=0;
-    entryOrders.forEach(r=>{const qty=parseFloat(get(r,"Filled Qty"))||0;const price=parseFloat(get(r,"Avg Fill Price"))||0;totalEntryQty+=qty;totalEntryVal+=qty*price;});
-    const avgEntry=totalEntryQty?totalEntryVal/totalEntryQty:0;
-    let totalExitQty=0,totalExitVal=0;
-    exitOrders.forEach(r=>{const qty=parseFloat(get(r,"Filled Qty"))||0;const price=parseFloat(get(r,"Avg Fill Price"))||0;totalExitQty+=qty;totalExitVal+=qty*price;});
-    const avgExit=totalExitQty?totalExitVal/totalExitQty:0;
-    const contracts=Math.min(totalEntryQty,totalExitQty);
+    let tEQ=0,tEV=0; entryOrders.forEach(r=>{const q=parseFloat(get(r,"Filled Qty"))||0;const p=parseFloat(get(r,"Avg Fill Price"))||0;tEQ+=q;tEV+=q*p;});
+    const avgEntry=tEQ?tEV/tEQ:0;
+    let tXQ=0,tXV=0; exitOrders.forEach(r=>{const q=parseFloat(get(r,"Filled Qty"))||0;const p=parseFloat(get(r,"Avg Fill Price"))||0;tXQ+=q;tXV+=q*p;});
+    const avgExit=tXQ?tXV/tXQ:0;
+    const contracts=Math.min(tEQ,tXQ);
     const pnl=isShort?(avgEntry-avgExit)*contracts*multiplier:(avgExit-avgEntry)*contracts*multiplier;
     const fillTime=get(orders[0],"Fill Time");
     const timePart=fillTime.split(" ")[1]?.substring(0,5)||"";
-    const dateParts=fillTime.split(" ")[0]?.split("/")||[];
-    const tradeDate=dateParts.length===3?`${dateParts[2]}-${dateParts[0].padStart(2,"0")}-${dateParts[1].padStart(2,"0")}`:new Date().toISOString().split("T")[0];
+    const dp=fillTime.split(" ")[0]?.split("/")||[];
+    const tradeDate=dp.length===3?`${dp[2]}-${dp[0].padStart(2,"0")}-${dp[1].padStart(2,"0")}`:new Date().toISOString().split("T")[0];
     const stopOrder=orders.find(r=>get(r,"Type").trim()==="Stop"&&get(r,"Stop Price"));
     const limitOrder=orders.find(r=>get(r,"Type").trim()==="Limit"&&get(r,"Limit Price"));
-    trades.push({ ...EMPTY, id:Date.now()+Math.random(), date:tradeDate, time:timePart, entry:avgEntry.toFixed(2), exit:avgExit.toFixed(2), stopLoss:stopOrder?get(stopOrder,"Stop Price"):"", takeProfit:limitOrder?get(limitOrder,"Limit Price"):"", contracts:String(contracts), pnl:pnl.toFixed(2), outcome:pnl>0.01?"Win":pnl<-0.01?"Loss":"Breakeven", bias:isShort?"Bearish":"Bullish", accountIds:[], notes:`Auto-imported · ${contractCode} · ${isShort?"Short":"Long"}` });
+    trades.push({...EMPTY,id:Date.now()+Math.random(),date:tradeDate,time:timePart,entry:avgEntry.toFixed(2),exit:avgExit.toFixed(2),stopLoss:stopOrder?get(stopOrder,"Stop Price"):"",takeProfit:limitOrder?get(limitOrder,"Limit Price"):"",contracts:String(contracts),pnl:pnl.toFixed(2),outcome:pnl>0.01?"Win":pnl<-0.01?"Loss":"Breakeven",bias:isShort?"Bearish":"Bullish",accountIds:[],notes:`Auto-imported · ${contractCode} · ${isShort?"Short":"Long"}`});
   };
   filled.forEach(r=>{
     const side=get(r,"B/S").trim(); const qty=parseFloat(get(r,"Filled Qty"))||0;
@@ -172,16 +171,17 @@ function parseTradovateCSV(text) {
 
 export default function App() {
   const [trades, setTrades] = useStorage("nq_trades_v7",[]);
-  const [accounts, setAccounts] = useStorage("nq_accounts_v5",[]);
-  const [confluences, setConfluences] = useStorage("nq_confluences_v1", DEFAULT_CONFLUENCES);
-  const [propFirms, setPropFirms] = useStorage("nq_firms_v1", DEFAULT_FIRMS);
-  const [transactions, setTransactions] = useStorage("nq_transactions_v1", {}); // { accountId: [{type,amount,date,notes}] }
+  const [accounts, setAccounts] = useStorage("nq_accounts_v6",[]);
+  const [confluences, setConfluences] = useStorage("nq_confluences_v1",DEFAULT_CONFLUENCES);
+  const [propFirms, setPropFirms] = useStorage("nq_firms_v1",DEFAULT_FIRMS);
+  const [transactions, setTransactions] = useStorage("nq_transactions_v2",[]);
+  const [showDormant, setShowDormant] = useStorage("nq_show_dormant",false);
   const [view, setView] = useState("dashboard");
+  const [analyticsSection, setAnalyticsSection] = useState("rr");
   const [showForm, setShowForm] = useState(false);
   const [showAccountForm, setShowAccountForm] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showConfluenceManager, setShowConfluenceManager] = useState(false);
-  const [showTransactionModal, setShowTransactionModal] = useState(null); // accountId
   const [editIdx, setEditIdx] = useState(null);
   const [editAccountIdx, setEditAccountIdx] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -191,11 +191,12 @@ export default function App() {
   const [filterOutcome, setFilterOutcome] = useState("All");
   const [filterAccount, setFilterAccount] = useState("All");
   const [filterConfluence, setFilterConfluence] = useState("All");
+  const [filterMonth, setFilterMonth] = useState("All");
   const [calSelectedAccounts, setCalSelectedAccounts] = useState([]);
+  const [calMonth, setCalMonth] = useState(()=>{ const d=new Date(); return{y:d.getFullYear(),m:d.getMonth()}; });
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReviewLoading, setAiReviewLoading] = useState(false);
   const [screenshotPreview, setScreenshotPreview] = useState(null);
-  const [calMonth, setCalMonth] = useState(()=>{ const d=new Date(); return{y:d.getFullYear(),m:d.getMonth()}; });
   const [toast, setToast] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [importPreview, setImportPreview] = useState(null);
@@ -210,28 +211,20 @@ export default function App() {
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const saf = (k,v) => setAccountForm(f=>({...f,[k]:v}));
 
-  // Auto-calc RR when pnl or risk changes
-  useEffect(() => {
-    const pnl = parseFloat(form.pnl);
-    const risk = parseFloat(form.risk) || 250;
-    if (!isNaN(pnl) && risk > 0) {
-      const rr = (pnl / risk).toFixed(2);
-      setForm(f => ({ ...f, rr }));
-      // Auto breakeven
-      if (Math.abs(pnl) <= risk * BE_TOLERANCE) setForm(f => ({ ...f, rr, outcome: "Breakeven" }));
-      else if (pnl > 0) setForm(f => ({ ...f, rr, outcome: "Win" }));
-      else setForm(f => ({ ...f, rr, outcome: "Loss" }));
-    }
-  }, [form.pnl, form.risk]);
+  const activeAccounts = useMemo(()=>accounts.filter(a=>showDormant||!a.dormant),[accounts,showDormant]);
 
-  // Save new prop firm
-  useEffect(() => {
-    if (accountForm.firm && !propFirms.includes(accountForm.firm)) {
-      setPropFirms(prev => [...new Set([...prev, accountForm.firm])]);
+  useEffect(()=>{
+    const pnl=parseFloat(form.pnl);
+    const risk=parseFloat(form.risk)||250;
+    if(!isNaN(pnl)&&risk>0){
+      const rr=(pnl/risk).toFixed(2);
+      if(Math.abs(pnl)<=risk*BE_TOLERANCE) setForm(f=>({...f,rr,outcome:"Breakeven"}));
+      else if(pnl>0) setForm(f=>({...f,rr,outcome:"Win"}));
+      else setForm(f=>({...f,rr,outcome:"Loss"}));
     }
-  }, [accountForm.firm]);
+  },[form.pnl,form.risk]);
 
-  const computeStats = useCallback((tradeList) => {
+  const computeStats = useCallback((tradeList)=>{
     if(!tradeList.length)return null;
     const wins=tradeList.filter(t=>t.outcome==="Win");
     const losses=tradeList.filter(t=>t.outcome==="Loss");
@@ -248,44 +241,34 @@ export default function App() {
     let cum=0,peak=0,maxDD=0;
     const equity=sorted.map(t=>{cum+=parseFloat(t.pnl)||0;if(cum>peak)peak=cum;const dd=peak-cum;if(dd>maxDD)maxDD=dd;return{date:t.date,value:cum};});
     const dayMap={};
-    tradeList.forEach(t=>{if(!dayMap[t.date])dayMap[t.date]=0;dayMap[t.date]+=parseFloat(t.pnl)||0;});
+    tradeList.forEach(t=>{if(!dayMap[t.date])dayMap[t.date]={pnl:0,count:0,wins:0,losses:0};dayMap[t.date].pnl+=parseFloat(t.pnl)||0;dayMap[t.date].count++;if(t.outcome==="Win")dayMap[t.date].wins++;if(t.outcome==="Loss")dayMap[t.date].losses++;});
     const followedPlanRate=tradeList.filter(t=>t.followedPlan).length/tradeList.length*100;
     const revSorted=[...sorted].reverse(); let streak=0;
     for(let i=0;i<revSorted.length;i++){const t=revSorted[i];if(i===0){streak=t.outcome==="Win"?1:t.outcome==="Loss"?-1:0;}else{if(t.outcome==="Win"&&streak>0)streak++;else if(t.outcome==="Loss"&&streak<0)streak--;else break;}}
-
-    // RR Distribution (final R per trade)
     const rrDist={};
     RR_BUCKETS.forEach(b=>rrDist[b]={count:0,wins:0,losses:0});
     tradeList.filter(t=>t.rr).forEach(t=>{
       const r=parseFloat(t.rr);
-      let bucket=r>=5?"5R+":Math.round(Math.abs(r)*2)/2+"R";
+      const bucket=r>=5?"5R+":Math.round(Math.abs(r)*2)/2+"R";
       if(rrDist[bucket]){rrDist[bucket].count++;if(t.outcome==="Win")rrDist[bucket].wins++;if(t.outcome==="Loss")rrDist[bucket].losses++;}
     });
-
-    // Cumulative hit rate — for each R level, % of trades that reached AT LEAST that R
     const rrHitRate={};
     RR_BUCKETS.forEach(b=>{
       const threshold=b==="5R+"?5:parseFloat(b);
       const reached=tradeList.filter(t=>t.rr&&Math.abs(parseFloat(t.rr))>=threshold);
-      rrHitRate[b]={ count:reached.length, pct:tradeList.length?(reached.length/tradeList.length)*100:0, wins:reached.filter(t=>t.outcome==="Win").length };
+      rrHitRate[b]={count:reached.length,pct:tradeList.length?(reached.length/tradeList.length)*100:0};
     });
-
-    // Confluence stats
     const confMap={};
     confluences.forEach(c=>confMap[c]={count:0,wins:0,losses:0,pnl:0});
     tradeList.forEach(t=>{(t.confluences||[]).forEach(c=>{if(confMap[c]){confMap[c].count++;confMap[c].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")confMap[c].wins++;if(t.outcome==="Loss")confMap[c].losses++;}});});
-
-    // Time of day distribution (5 min slots 9:30-10:30)
     const timeMap={};
     TIME_SLOTS.forEach(s=>timeMap[s]={count:0,wins:0,losses:0,pnl:0});
     tradeList.forEach(t=>{
       if(!t.time)return;
       const [th,tm]=t.time.split(":").map(Number);
-      const roundedM=Math.floor(tm/5)*5;
-      const slot=`${String(th).padStart(2,"0")}:${String(roundedM).padStart(2,"0")}`;
+      const slot=`${String(th).padStart(2,"0")}:${String(Math.floor(tm/5)*5).padStart(2,"0")}`;
       if(timeMap[slot]){timeMap[slot].count++;timeMap[slot].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")timeMap[slot].wins++;if(t.outcome==="Loss")timeMap[slot].losses++;}
     });
-
     return{wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,maxDD,followedPlanRate,dayMap,streak,rrDist,rrHitRate,confMap,timeMap};
   },[confluences]);
 
@@ -300,7 +283,7 @@ export default function App() {
     const gainPct=(pnl/startBal)*100;
     const ddUsed=s?.maxDD||0;
     const ddPct=(ddUsed/startBal)*100;
-    const acctTx=transactions[acc.id]||[];
+    const acctTx=transactions.filter(t=>t.accountId===acc.id);
     const totalExpenses=acctTx.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
     const totalPayouts=acctTx.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
     const netReal=totalPayouts-totalExpenses;
@@ -315,13 +298,6 @@ export default function App() {
     return src.map((p,i)=>{const x=(i/(src.length-1||1))*400;const y=80-((p.value-minV)/range)*80;return`${i===0?"M":"L"}${x},${y}`;}).join(" ");
   },[stats,accountStats,selectedAccount]);
 
-  const filteredTrades=useMemo(()=>trades.filter(t=>
-    (filterOutcome==="All"||t.outcome===filterOutcome)&&
-    (filterAccount==="All"||(t.accountIds||[]).includes(filterAccount))&&
-    (filterConfluence==="All"||(t.confluences||[]).includes(filterConfluence))
-  ).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,filterOutcome,filterAccount,filterConfluence]);
-
-  // Calendar day map for selected accounts
   const calDayMap=useMemo(()=>{
     const filtered=calSelectedAccounts.length>0
       ?trades.filter(t=>(t.accountIds||[]).some(id=>calSelectedAccounts.includes(id)))
@@ -331,10 +307,32 @@ export default function App() {
     return map;
   },[trades,calSelectedAccounts]);
 
+  const calDays=useMemo(()=>({first:new Date(calMonth.y,calMonth.m,1).getDay(),total:new Date(calMonth.y,calMonth.m+1,0).getDate()}),[calMonth]);
+
+  // Available months from trades for journal filter
+  const availableMonths=useMemo(()=>{
+    const months=new Set(trades.map(t=>t.date?.substring(0,7)).filter(Boolean));
+    return["All",...[...months].sort().reverse()];
+  },[trades]);
+
+  const filteredTrades=useMemo(()=>trades.filter(t=>
+    (filterOutcome==="All"||t.outcome===filterOutcome)&&
+    (filterAccount==="All"||(t.accountIds||[]).includes(filterAccount))&&
+    (filterConfluence==="All"||(t.confluences||[]).includes(filterConfluence))&&
+    (filterMonth==="All"||t.date?.startsWith(filterMonth))
+  ).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,filterOutcome,filterAccount,filterConfluence,filterMonth]);
+
   const galleryTrades=useMemo(()=>trades.filter(t=>t.screenshot&&
     (galleryFilter.outcome==="All"||t.outcome===galleryFilter.outcome)&&
     (galleryFilter.confluence==="All"||(t.confluences||[]).includes(galleryFilter.confluence))
   ).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,galleryFilter]);
+
+  // Financials summary
+  const financialsSummary=useMemo(()=>{
+    const totalExpenses=transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+    const totalPayouts=transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+    return{totalExpenses,totalPayouts,net:totalPayouts-totalExpenses};
+  },[transactions]);
 
   const handleScreenshot=useCallback(async(file)=>{
     if(!file)return;
@@ -362,7 +360,7 @@ export default function App() {
           ...(parsed.confluences?.length&&{confluences:parsed.confluences.filter(c=>confluences.includes(c))}),
           ...(parsed.notes&&{notes:parsed.notes}),
         }));
-        showToast("✓ AI extracted trade data from chart");
+        showToast("✓ AI extracted trade data");
       }catch{showToast("Could not parse chart — fill in manually","error");}
       setAiLoading(false);
     };
@@ -373,7 +371,7 @@ export default function App() {
     setAiReviewLoading(true);
     const accs=accounts.filter(a=>(trade.accountIds||[]).includes(a.id));
     try{
-      const review=await callClaude([{role:"user",content:`Review this NQ futures trade:\nDate: ${trade.date} ${trade.time}${accs.length?` | Accounts: ${accs.map(a=>a.name).join(", ")}`:""}\nBias: ${trade.bias}\nEntry: ${trade.entry} | SL: ${trade.stopLoss} | TP: ${trade.takeProfit} | Exit: ${trade.exit}\nP&L: $${trade.pnl} | R:R: ${trade.rr}R | Risk: $${trade.risk||250} | Outcome: ${trade.outcome}\nConfluences: ${(trade.confluences||[]).join(", ")||"None logged"}\nFollowed Plan: ${trade.followedPlan} | Emotion: ${trade.emotion}\nNotes: ${trade.notes}\nProvide concise review: (1) Confluence strength (2) Execution (3) Risk management (4) What to improve. Under 200 words.`}],
+      const review=await callClaude([{role:"user",content:`Review this NQ futures trade:\nDate: ${trade.date} ${trade.time}${accs.length?` | Accounts: ${accs.map(a=>a.name).join(", ")}`:""}\nBias: ${trade.bias}\nEntry: ${trade.entry} | SL: ${trade.stopLoss} | TP: ${trade.takeProfit} | Exit: ${trade.exit}\nP&L: $${trade.pnl} | R:R: ${trade.rr}R | Risk: $${trade.risk||250} | Outcome: ${trade.outcome}\nConfluences: ${(trade.confluences||[]).join(", ")||"None"}\nFollowed Plan: ${trade.followedPlan} | Emotion: ${trade.emotion}\nNotes: ${trade.notes}\nReview: (1) Confluence strength (2) Execution (3) Risk management (4) Improvement. Under 200 words.`}],
         "You are an elite NQ futures trading coach specialising in ICT concepts. Give specific, actionable feedback.");
       const idx=trades.indexOf(trade);
       if(idx!==-1)setTrades(prev=>prev.map((t,i)=>i===idx?{...t,aiReview:review}:t));
@@ -395,18 +393,12 @@ export default function App() {
     reader.onload=(e)=>{
       try{
         const parsed=parseTradovateCSV(e.target.result);
-        // Apply BE tolerance
-        const withBE=parsed.map(t=>{
-          const pnl=parseFloat(t.pnl)||0;
-          const risk=250;
-          if(Math.abs(pnl)<=risk*BE_TOLERANCE)return{...t,outcome:"Breakeven"};
-          return t;
-        });
+        const withBE=parsed.map(t=>{const pnl=parseFloat(t.pnl)||0;const risk=250;if(Math.abs(pnl)<=risk*BE_TOLERANCE)return{...t,outcome:"Breakeven"};return t;});
         setImportPreview(withBE);
         setImportFileName(file.name);
-        setImportSelectedAccounts(accounts.map(a=>a.id));
+        setImportSelectedAccounts(activeAccounts.map(a=>a.id));
         setShowImportModal(true);
-      }catch(err){showToast("Could not parse Tradovate file","error");}
+      }catch{showToast("Could not parse Tradovate file","error");}
     };
     reader.readAsText(file);
   };
@@ -417,8 +409,7 @@ export default function App() {
     const risk=250;
     const newTrades=importPreview.filter(t=>!existing.has(`${t.date}${t.time}${t.entry}`)).map(t=>{
       const pnl=parseFloat(t.pnl)||0;
-      const rr=(pnl/risk).toFixed(2);
-      return{...t,id:Date.now()+Math.random(),accountIds:[...importSelectedAccounts],risk:String(risk),rr};
+      return{...t,id:Date.now()+Math.random(),accountIds:[...importSelectedAccounts],risk:String(risk),rr:(pnl/risk).toFixed(2)};
     });
     setTrades(prev=>[...prev,...newTrades]);
     setShowImportModal(false);
@@ -444,16 +435,9 @@ export default function App() {
     showToast("✓ Account saved");
   };
 
-  const addTransaction=(accountId)=>{
-    if(!newTransaction.amount)return;
-    const tx={...newTransaction,id:Date.now()};
-    setTransactions(prev=>({...prev,[accountId]:[...(prev[accountId]||[]),tx]}));
-    setNewTransaction(EMPTY_TRANSACTION);
-    showToast(`✓ ${tx.type==="expense"?"Expense":"Payout"} logged`);
-  };
-
-  const deleteTransaction=(accountId,txId)=>{
-    setTransactions(prev=>({...prev,[accountId]:(prev[accountId]||[]).filter(t=>t.id!==txId)}));
+  const toggleDormant=(idx)=>{
+    setAccounts(prev=>prev.map((a,i)=>i===idx?{...a,dormant:!a.dormant}:a));
+    showToast(accounts[idx].dormant?"Account reactivated":"Account set to dormant");
   };
 
   const openEdit=(idx)=>{setEditIdx(idx);setForm({...EMPTY,...trades[idx],accountIds:trades[idx].accountIds||[],confluences:trades[idx].confluences||[]});setScreenshotPreview(trades[idx].screenshot||null);setShowForm(true);};
@@ -461,11 +445,17 @@ export default function App() {
   const openEditAccount=(idx)=>{setEditAccountIdx(idx);setAccountForm(accounts[idx]);setShowAccountForm(true);};
   const deleteAccount=(idx)=>{setAccounts(prev=>prev.filter((_,i)=>i!==idx));showToast("Account removed","warn");};
 
-  const calDays=useMemo(()=>({first:new Date(calMonth.y,calMonth.m,1).getDay(),total:new Date(calMonth.y,calMonth.m+1,0).getDate()}),[calMonth]);
-  const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
   const inp={width:"100%",background:"#0d1520",border:"1px solid #2a3a50",borderRadius:3,padding:"8px 10px",color:"#cdd6e0",fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
   const lbl={display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"};
   const activeStats=selectedAccount?accountStats.find(a=>a.id===selectedAccount)?.stats:stats;
+
+  const ANALYTICS_SECTIONS=[
+    {id:"rr",label:"R:R Distribution"},
+    {id:"hitrate",label:"Cumulative Hit Rate"},
+    {id:"confluence",label:"Confluence"},
+    {id:"time",label:"Time of Day"},
+    {id:"metrics",label:"Key Metrics"},
+  ];
 
   return (
     <div style={{fontFamily:"'IBM Plex Mono','Courier New',monospace",background:"#060a0f",minHeight:"100vh",color:"#cdd6e0",width:"100%"}}>
@@ -482,7 +472,6 @@ export default function App() {
         .teal{background:#0d2a2a;color:#34d399;border:1px solid #0a4040}.teal:hover{background:#0d3535}
         .red{background:#1a0808;color:#f87171;border:1px solid #3a1515}.red:hover{background:#2a0808}
         .win{color:#4ade80}.loss{color:#f87171}.be{color:#f0b429}
-        .tag{padding:2px 7px;border-radius:2px;font-size:10px;letter-spacing:0.08em}
         .ct{background:#0d1a1a;color:#34d399;border:1px solid #0a3030;font-size:9px;padding:2px 6px;border-radius:2px}
         .overlay{position:fixed;inset:0;background:rgba(6,10,15,0.93);backdrop-filter:blur(8px);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto}
         .modal{background:#0a0f18;border:1px solid #2a3a50;border-radius:6px;width:100%;max-width:860px;padding:28px;margin:auto}
@@ -499,24 +488,27 @@ export default function App() {
         .nav-active{background:#0d1520;color:#f0b429;border:1px solid #2a3a50}
         .nav-inactive{background:transparent;color:#4a6a8a;border:1px solid transparent}
         .import-row:hover{background:#0d1520}
-        .split-modal{display:grid;grid-template-columns:1fr 300px;gap:20px}
         .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
         .gallery-item{cursor:pointer;border-radius:4px;overflow:hidden;border:1px solid #1a2535;transition:all 0.2s;background:#0a0f18}
         .gallery-item:hover{border-color:#f0b429;transform:translateY(-2px)}
-        .time-bar{display:flex;align-items:flex-end;gap:3px;height:80px}
+        .analytics-layout{display:grid;grid-template-columns:180px 1fr;gap:16px;align-items:start}
+        .analytics-nav-item{padding:10px 14px;border-radius:3px;cursor:pointer;font-size:11px;letter-spacing:0.08em;transition:all 0.15s;border:1px solid transparent;margin-bottom:4px}
+        .analytics-nav-active{background:#0d1520;color:#f0b429;border-color:#2a3a50}
+        .analytics-nav-inactive{color:#4a6a8a}.analytics-nav-inactive:hover{color:#cdd6e0;background:#0a0f18}
+        .dormant-badge{font-size:8px;padding:2px 6px;background:#1a1208;color:#f0b429;border:1px solid #3a2a00;border-radius:2px;margin-left:6px}
       `}</style>
 
       {toast&&<div className="toast" style={{background:toast.type==="error"?"#1a0808":toast.type==="warn"?"#1a1208":"#081a0e",border:`1px solid ${toast.type==="error"?"#5a1a1a":toast.type==="warn"?"#5a4a0a":"#1a5a2a"}`,color:toast.type==="error"?"#f87171":toast.type==="warn"?"#f0b429":"#4ade80"}}>{toast.msg}</div>}
 
       {/* Header */}
       <div style={{borderBottom:"1px solid #1a2535",padding:"0 24px",background:"#060a0f",position:"sticky",top:0,zIndex:100}}>
-        <div style={{maxWidth:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",height:52}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:52}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             <div className="hd">Trading<span style={{color:"#cdd6e0"}}> Journal</span></div>
             <div style={{fontSize:9,color:"#2a3a50",letterSpacing:"0.2em",borderLeft:"1px solid #1a2535",paddingLeft:12}}>NQ · ICT · IFVG</div>
           </div>
           <div style={{display:"flex",gap:2}}>
-            {["dashboard","accounts","journal","analytics","calendar","screenshots"].map(v=>(
+            {["dashboard","accounts","journal","analytics","screenshots","financials"].map(v=>(
               <button key={v} className={`np ${view===v?"nav-active":"nav-inactive"}`} onClick={()=>setView(v)}>{v}</button>
             ))}
           </div>
@@ -529,7 +521,7 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{maxWidth:"100%",padding:"20px 24px"}}>
+      <div style={{padding:"20px 24px"}}>
 
         {/* DASHBOARD */}
         {view==="dashboard"&&(
@@ -537,17 +529,16 @@ export default function App() {
             <div style={{marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
               <div>
                 <div className="hd" style={{fontSize:20}}>PERFORMANCE</div>
-                <div style={{color:"#3a5a7a",fontSize:11,marginTop:4}}>{trades.length} trades across {accounts.length} accounts</div>
+                <div style={{color:"#3a5a7a",fontSize:11,marginTop:4}}>{trades.length} trades · {activeAccounts.length} active accounts</div>
               </div>
-              {accounts.length>0&&(
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <button className={`np ${!selectedAccount?"gold":"dim"}`} onClick={()=>setSelectedAccount(null)} style={{fontSize:9}}>ALL</button>
-                  {accounts.map(a=>(
-                    <button key={a.id} className={`np ${selectedAccount===a.id?"gold":"dim"}`} onClick={()=>setSelectedAccount(selectedAccount===a.id?null:a.id)} style={{fontSize:9}}>{a.name}</button>
-                  ))}
-                </div>
-              )}
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                <button className={`np ${!selectedAccount?"gold":"dim"}`} onClick={()=>setSelectedAccount(null)} style={{fontSize:9}}>ALL</button>
+                {activeAccounts.map(a=>(
+                  <button key={a.id} className={`np ${selectedAccount===a.id?"gold":"dim"}`} onClick={()=>setSelectedAccount(selectedAccount===a.id?null:a.id)} style={{fontSize:9}}>{a.name}</button>
+                ))}
+              </div>
             </div>
+
             {!trades.length?(
               <div style={{textAlign:"center",padding:"80px 0"}}>
                 <div className="hd" style={{fontSize:40,color:"#1a2535",marginBottom:16}}>0</div>
@@ -576,7 +567,8 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12}}>
+
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:20}}>
                   <div className="card">
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                       <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em"}}>EQUITY CURVE</div>
@@ -589,10 +581,10 @@ export default function App() {
                   </div>
                   <div className="card" style={{overflowY:"auto",maxHeight:220}}>
                     <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:12}}>ACCOUNTS</div>
-                    {!accounts.length?<div style={{color:"#3a5a7a",fontSize:11}}>No accounts added</div>:accountStats.map(a=>(
-                      <div key={a.id} style={{marginBottom:14,paddingBottom:14,borderBottom:"1px solid #0d1520"}}>
+                    {!activeAccounts.length?<div style={{color:"#3a5a7a",fontSize:11}}>No accounts</div>:accountStats.filter(a=>!a.dormant).map(a=>(
+                      <div key={a.id} style={{marginBottom:12,paddingBottom:12,borderBottom:"1px solid #0d1520"}}>
                         <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                          <div><div style={{fontSize:11,color:"#cdd6e0"}}>{a.name}</div><div style={{fontSize:9,color:"#3a5a7a"}}>{a.firm} · {a.phase}</div></div>
+                          <div style={{fontSize:11,color:"#cdd6e0"}}>{a.name}</div>
                           <div style={{textAlign:"right"}}>
                             <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:a.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(a.pnl)}</div>
                             <div style={{fontSize:9,color:a.gainPct>=0?"#4ade80":"#f87171"}}>{a.gainPct>=0?"+":""}{a.gainPct.toFixed(2)}%</div>
@@ -600,12 +592,69 @@ export default function App() {
                         </div>
                         <div style={{fontSize:9,color:"#3a5a7a",marginBottom:3}}>DD {a.ddPct.toFixed(1)}% / {a.ddLimit}%</div>
                         <div className="meter-bg"><div style={{width:`${Math.min(100,(a.ddPct/a.ddLimit)*100)}%`,height:"100%",background:a.ddPct/a.ddLimit>0.7?"#f87171":a.ddPct/a.ddLimit>0.4?"#f0b429":"#4ade80",borderRadius:2}}/></div>
-                        <div style={{fontSize:9,color:"#3a5a7a",marginTop:5,marginBottom:3}}>GAIN FROM START</div>
-                        <div className="meter-bg" style={{background:a.gainPct<0?"#2a0808":"#1a2535"}}>
-                          <div style={{width:`${Math.min(100,Math.abs(a.gainPct))}%`,height:"100%",background:a.gainPct>=0?"#4ade80":"#f87171",borderRadius:2}}/>
-                        </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                {/* CALENDAR IN DASHBOARD */}
+                <div className="card" style={{marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                    <div className="shd" style={{fontSize:13}}>P&L CALENDAR</div>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                        <button className={`np ${calSelectedAccounts.length===0?"gold":"dim"}`} onClick={()=>setCalSelectedAccounts([])} style={{fontSize:8,padding:"4px 8px"}}>ALL</button>
+                        {activeAccounts.map(a=>(
+                          <button key={a.id} className={`np ${calSelectedAccounts.includes(a.id)?"gold":"dim"}`} onClick={()=>setCalSelectedAccounts(prev=>prev.includes(a.id)?prev.filter(x=>x!==a.id):[...prev,a.id])} style={{fontSize:8,padding:"4px 8px"}}>{a.name}</button>
+                        ))}
+                      </div>
+                      <div style={{display:"flex",gap:4,alignItems:"center",borderLeft:"1px solid #1a2535",paddingLeft:8}}>
+                        <button onClick={()=>setCalMonth(p=>{const d=new Date(p.y,p.m-1);return{y:d.getFullYear(),m:d.getMonth()};})} className="np dim" style={{padding:"4px 10px"}}>‹</button>
+                        <span style={{fontSize:11,color:"#cdd6e0",minWidth:120,textAlign:"center"}}>{MONTHS[calMonth.m]} {calMonth.y}</span>
+                        <button onClick={()=>setCalMonth(p=>{const d=new Date(p.y,p.m+1);return{y:d.getFullYear(),m:d.getMonth()};})} className="np dim" style={{padding:"4px 10px"}}>›</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(()=>{
+                    const mt=Object.entries(calDayMap).filter(([date])=>{const d=new Date(date);return d.getFullYear()===calMonth.y&&d.getMonth()===calMonth.m;});
+                    const mPnl=mt.reduce((s,[,d])=>s+d.pnl,0);
+                    const mTrades=mt.reduce((s,[,d])=>s+d.count,0);
+                    const mWins=mt.reduce((s,[,d])=>s+d.wins,0);
+                    const mLosses=mt.reduce((s,[,d])=>s+d.losses,0);
+                    const mWR=mWins+mLosses>0?(mWins/(mWins+mLosses))*100:0;
+                    return(
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+                        {[["MONTH P&L",fmt$(mPnl),mPnl>=0?"#4ade80":"#f87171"],["TRADES",mTrades,"#cdd6e0"],["WIN RATE",`${mWR.toFixed(0)}%`,mWR>=50?"#4ade80":"#f87171"],["TRADING DAYS",mt.length,"#60a5fa"]].map(([l,v,c])=>(
+                          <div key={l} style={{background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"8px 12px"}}>
+                            <div style={{fontSize:8,color:"#3a5a7a",letterSpacing:"0.12em",marginBottom:4}}>{l}</div>
+                            <div style={{fontFamily:"'Orbitron'",fontSize:16,fontWeight:900,color:c}}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:4}}>
+                    {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d=><div key={d} style={{textAlign:"center",fontSize:8,color:"#2a3a50",padding:"3px 0"}}>{d}</div>)}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+                    {Array.from({length:calDays.first}).map((_,i)=><div key={`e${i}`}/>)}
+                    {Array.from({length:calDays.total}).map((_,i)=>{
+                      const day=i+1;
+                      const ds=`${calMonth.y}-${String(calMonth.m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+                      const d=calDayMap[ds]; const ht=!!d;
+                      const today=new Date().toISOString().split("T")[0]===ds;
+                      return(
+                        <div key={day} style={{padding:4,border:`1px solid ${today?"#f0b429":ht?(d.pnl>=0?"rgba(74,222,128,0.3)":"rgba(248,113,113,0.3)"):"#1a2535"}`,borderRadius:3,background:ht?(d.pnl>=0?"rgba(74,222,128,0.05)":"rgba(248,113,113,0.05)"):"#060a0f",minHeight:52}}>
+                          <div style={{fontSize:9,color:today?"#f0b429":"#2a3a50",marginBottom:2}}>{day}</div>
+                          {ht&&<>
+                            <div style={{fontFamily:"'Orbitron'",fontSize:9,fontWeight:900,color:d.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(d.pnl)}</div>
+                            <div style={{fontSize:8,color:"#3a5a7a"}}>{d.count}t {d.wins}W {d.losses}L</div>
+                          </>}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </>
@@ -617,8 +666,14 @@ export default function App() {
         {view==="accounts"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:20}}>
-              <div><div className="hd" style={{fontSize:20}}>ACCOUNTS</div><div style={{color:"#3a5a7a",fontSize:11,marginTop:4}}>{accounts.length} funded accounts</div></div>
-              <button className="np" style={{background:"#1a2535",color:"#cdd6e0",border:"1px solid #2a3a50"}} onClick={()=>{setEditAccountIdx(null);setAccountForm(EMPTY_ACCOUNT);setShowAccountForm(true);}}>+ ADD ACCOUNT</button>
+              <div>
+                <div className="hd" style={{fontSize:20}}>ACCOUNTS</div>
+                <div style={{color:"#3a5a7a",fontSize:11,marginTop:4}}>{activeAccounts.length} active · {accounts.filter(a=>a.dormant).length} dormant</div>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button className={`np ${showDormant?"gold":"dim"}`} onClick={()=>setShowDormant(p=>!p)} style={{fontSize:9}}>{showDormant?"HIDE DORMANT":"SHOW DORMANT"}</button>
+                <button className="np" style={{background:"#1a2535",color:"#cdd6e0",border:"1px solid #2a3a50"}} onClick={()=>{setEditAccountIdx(null);setAccountForm(EMPTY_ACCOUNT);setShowAccountForm(true);}}>+ ADD ACCOUNT</button>
+              </div>
             </div>
             {!accounts.length?(
               <div style={{textAlign:"center",padding:"60px 0"}}>
@@ -626,71 +681,63 @@ export default function App() {
                 <button className="np gold" onClick={()=>setShowAccountForm(true)} style={{padding:"10px 24px"}}>ADD FIRST ACCOUNT</button>
               </div>
             ):(
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:12}}>
-                {accountStats.map((a,i)=>{
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
+                {accountStats.filter(a=>showDormant||!a.dormant).map((a,i)=>{
+                  const realIdx=accounts.findIndex(ac=>ac.id===a.id);
                   const ddColor=a.ddPct/a.ddLimit>0.7?"#f87171":a.ddPct/a.ddLimit>0.4?"#f0b429":"#4ade80";
-                  const acctTx=transactions[a.id]||[];
                   return(
-                    <div key={a.id} className="card" style={{padding:20}}>
+                    <div key={a.id} className="card" style={{padding:20,opacity:a.dormant?0.6:1,borderColor:a.dormant?"#1a2535":""}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
                         <div>
-                          <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:"#cdd6e0",marginBottom:3}}>{a.name}</div>
-                          <div style={{fontSize:10,color:"#4a6a8a"}}>{a.firm} · <span style={{color:"#60a5fa"}}>{a.phase}</span></div>
+                          <div style={{display:"flex",alignItems:"center"}}>
+                            <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:a.dormant?"#4a6a8a":"#cdd6e0"}}>{a.name}</div>
+                            {a.dormant&&<span className="dormant-badge">DORMANT</span>}
+                          </div>
+                          <div style={{fontSize:10,color:"#4a6a8a",marginTop:2}}>{a.firm} · <span style={{color:"#60a5fa"}}>{a.phase}</span></div>
                         </div>
                         <div style={{textAlign:"right"}}>
-                          <div style={{fontFamily:"'Orbitron'",fontSize:18,fontWeight:900,color:a.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(a.pnl)}</div>
+                          <div style={{fontFamily:"'Orbitron'",fontSize:16,fontWeight:900,color:a.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(a.pnl)}</div>
                           <div style={{fontSize:9,color:a.gainPct>=0?"#4ade80":"#f87171"}}>{a.gainPct>=0?"+":""}{a.gainPct.toFixed(2)}% from start</div>
-                          <div style={{fontSize:9,color:"#3a5a7a"}}>Balance: <span style={{color:"#cdd6e0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span></div>
+                          <div style={{fontSize:9,color:"#3a5a7a"}}>Bal: <span style={{color:"#cdd6e0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span></div>
                         </div>
                       </div>
-
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
                         {[["TRADES",a.tradeCount,"#cdd6e0"],["WIN RATE",a.stats?`${a.stats.winRate.toFixed(0)}%`:"—",a.stats?.winRate>=50?"#4ade80":"#f87171"],["AVG R:R",a.stats?`${a.stats.avgRR.toFixed(1)}R`:"—","#60a5fa"]].map(([l,v,c])=>(
                           <div key={l} style={{background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"8px 10px"}}>
-                            <div style={{fontSize:8,color:"#3a5a7a",letterSpacing:"0.1em",marginBottom:4}}>{l}</div>
-                            <div style={{fontFamily:"'Orbitron'",fontSize:14,fontWeight:900,color:c}}>{v}</div>
+                            <div style={{fontSize:8,color:"#3a5a7a",letterSpacing:"0.1em",marginBottom:3}}>{l}</div>
+                            <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:c}}>{v}</div>
                           </div>
                         ))}
                       </div>
-
                       <div style={{marginBottom:10}}>
                         <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                          <span style={{fontSize:9,color:"#4a6a8a"}}>DRAWDOWN USED</span>
+                          <span style={{fontSize:9,color:"#4a6a8a"}}>DRAWDOWN</span>
                           <span style={{fontSize:9,color:ddColor}}>{a.ddPct.toFixed(2)}% / {a.ddLimit}% max</span>
                         </div>
                         <div className="meter-bg"><div style={{width:`${Math.min(100,(a.ddPct/a.ddLimit)*100)}%`,height:"100%",background:ddColor,borderRadius:2}}/></div>
                       </div>
-
-                      <div style={{marginBottom:14}}>
+                      <div style={{marginBottom:12}}>
                         <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                          <span style={{fontSize:9,color:"#4a6a8a"}}>GAIN FROM STARTING BALANCE</span>
+                          <span style={{fontSize:9,color:"#4a6a8a"}}>GAIN FROM START</span>
                           <span style={{fontSize:9,color:a.gainPct>=0?"#4ade80":"#f87171"}}>{a.gainPct>=0?"+":""}{a.gainPct.toFixed(2)}%</span>
                         </div>
                         <div className="meter-bg" style={{background:a.gainPct<0?"#2a0808":"#1a2535"}}>
                           <div style={{width:`${Math.min(100,Math.abs(a.gainPct))}%`,height:"100%",background:a.gainPct>=0?"#4ade80":"#f87171",borderRadius:2}}/>
                         </div>
                       </div>
-
-                      {/* Expense / Payout summary */}
-                      <div style={{background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"10px 12px",marginBottom:12}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                          <span style={{fontSize:9,color:"#4a6a8a",letterSpacing:"0.1em"}}>FINANCIALS</span>
-                          <button onClick={()=>setShowTransactionModal(a.id)} className="np dim" style={{fontSize:8,padding:"2px 8px"}}>MANAGE</button>
-                        </div>
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                          {[["SPENT",fmt$(a.totalExpenses),"#f87171"],["WITHDRAWN",fmt$(a.totalPayouts),"#4ade80"],["NET REAL",fmt$(a.netReal),a.netReal>=0?"#4ade80":"#f87171"]].map(([l,v,c])=>(
-                            <div key={l}>
-                              <div style={{fontSize:8,color:"#3a5a7a",marginBottom:2}}>{l}</div>
-                              <div style={{fontFamily:"'Orbitron'",fontSize:12,fontWeight:900,color:c}}>{v}</div>
-                            </div>
+                      <div style={{background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"8px 12px",marginBottom:12}}>
+                        <div style={{fontSize:8,color:"#3a5a7a",letterSpacing:"0.1em",marginBottom:6}}>FINANCIALS</div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                          {[["SPENT",fmt$(a.totalExpenses),"#f87171"],["WITHDRAWN",fmt$(a.totalPayouts),"#4ade80"],["NET",fmt$(a.netReal),a.netReal>=0?"#4ade80":"#f87171"]].map(([l,v,c])=>(
+                            <div key={l}><div style={{fontSize:8,color:"#3a5a7a",marginBottom:2}}>{l}</div><div style={{fontFamily:"'Orbitron'",fontSize:11,fontWeight:900,color:c}}>{v}</div></div>
                           ))}
                         </div>
                       </div>
-
                       {a.notes&&<div style={{fontSize:10,color:"#3a5a7a",borderLeft:"2px solid #1a2535",paddingLeft:8,marginBottom:12,fontStyle:"italic"}}>{a.notes}</div>}
-                      <div style={{display:"flex",gap:8}}>
-                        <button onClick={()=>openEditAccount(i)} className="np dim" style={{fontSize:9,padding:"5px 12px"}}>EDIT</button>
-                        <button onClick={()=>deleteAccount(i)} className="np red" style={{fontSize:9,padding:"5px 12px"}}>REMOVE</button>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        <button onClick={()=>openEditAccount(realIdx)} className="np dim" style={{fontSize:9,padding:"5px 10px"}}>EDIT</button>
+                        <button onClick={()=>toggleDormant(realIdx)} className="np" style={{fontSize:9,padding:"5px 10px",background:a.dormant?"#081a0e":"#1a1208",color:a.dormant?"#4ade80":"#f0b429",border:`1px solid ${a.dormant?"#1a5a2a":"#3a2a00"}`}}>{a.dormant?"REACTIVATE":"SET DORMANT"}</button>
+                        <button onClick={()=>deleteAccount(realIdx)} className="np red" style={{fontSize:9,padding:"5px 10px"}}>REMOVE</button>
                       </div>
                     </div>
                   );
@@ -705,16 +752,17 @@ export default function App() {
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:20}}>
               <div><div className="hd" style={{fontSize:20}}>JOURNAL</div><div style={{color:"#3a5a7a",fontSize:11,marginTop:4}}>{filteredTrades.length} entries</div></div>
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                <Select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} options={availableMonths.map(m=>m==="All"?{value:"All",label:"All Months"}:{value:m,label:m})}/>
                 <Select value={filterOutcome} onChange={e=>setFilterOutcome(e.target.value)} options={["All",...OUTCOMES]}/>
-                <Select value={filterAccount} onChange={e=>setFilterAccount(e.target.value)} options={[{value:"All",label:"All Accounts"},...accounts.map(a=>({value:a.id,label:a.name}))]}/>
+                <Select value={filterAccount} onChange={e=>setFilterAccount(e.target.value)} options={[{value:"All",label:"All Accounts"},...activeAccounts.map(a=>({value:a.id,label:a.name}))]}/>
                 <Select value={filterConfluence} onChange={e=>setFilterConfluence(e.target.value)} options={["All",...confluences]}/>
                 <button className="np dim" style={{fontSize:9}} onClick={()=>setShowConfluenceManager(true)}>⚙ CONFLUENCES</button>
               </div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {filteredTrades.map((t,i)=>{
-                const oi=trades.indexOf(t);const pnl=parseFloat(t.pnl)||0;
+                const oi=trades.indexOf(t); const pnl=parseFloat(t.pnl)||0;
                 const accs=accounts.filter(a=>(t.accountIds||[]).includes(a.id));
                 return(
                   <div key={t.id||i} className="card" style={{padding:"14px 18px"}}>
@@ -723,7 +771,7 @@ export default function App() {
                         <span style={{fontSize:11,color:"#4a6a8a"}}>{t.date}{t.time&&<span style={{color:"#60a5fa",marginLeft:6}}>{t.time}</span>}</span>
                         <span style={{fontSize:10,color:t.bias==="Bullish"?"#4ade80":"#f87171"}}>● {t.bias}</span>
                         {accs.map(a=><span key={a.id} style={{fontSize:9,color:"#f0b429",background:"#1a1400",border:"1px solid #3a2a00",padding:"2px 7px",borderRadius:2}}>{a.name}</span>)}
-                        {!t.followedPlan&&<span style={{fontSize:9,color:"#f0b429",letterSpacing:"0.12em"}}>⚠ OFF-PLAN</span>}
+                        {!t.followedPlan&&<span style={{fontSize:9,color:"#f0b429"}}>⚠ OFF-PLAN</span>}
                       </div>
                       <div style={{display:"flex",gap:8,alignItems:"center"}}>
                         <div style={{textAlign:"right"}}>
@@ -735,18 +783,14 @@ export default function App() {
                       </div>
                     </div>
                     <div style={{display:"flex",gap:16,marginTop:8,fontSize:11,flexWrap:"wrap"}}>
-                      {[["Entry",t.entry,"#cdd6e0"],["Exit",t.exit,"#cdd6e0"],["SL",t.stopLoss,"#f87171"],["TP",t.takeProfit,"#4ade80"],["Risk",t.risk?`$${t.risk}`:"$250","#4a6a8a"],["Contracts",t.contracts,"#4a6a8a"]].map(([l,v,c])=>(
+                      {[["Entry",t.entry,"#cdd6e0"],["Exit",t.exit,"#cdd6e0"],["SL",t.stopLoss,"#f87171"],["TP",t.takeProfit,"#4ade80"],["Risk",`$${t.risk||250}`,"#4a6a8a"],["Contracts",t.contracts,"#4a6a8a"]].map(([l,v,c])=>(
                         <span key={l} style={{color:"#3a5a7a"}}>{l}: <span style={{color:c}}>{v||"—"}</span></span>
                       ))}
                     </div>
-                    {(t.confluences||[]).length>0&&(
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8}}>
-                        {t.confluences.map(c=><span key={c} className="ct">{c}</span>)}
-                      </div>
-                    )}
+                    {(t.confluences||[]).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8}}>{t.confluences.map(c=><span key={c} className="ct">{c}</span>)}</div>}
                     {t.notes&&<div style={{marginTop:8,fontSize:11,color:"#4a6a8a",borderLeft:"2px solid #1a2535",paddingLeft:10,fontStyle:"italic"}}>{t.notes}</div>}
                     {t.screenshot&&<div style={{marginTop:10}}><img src={t.screenshot} alt="chart" style={{maxHeight:180,borderRadius:3,border:"1px solid #1a2535",objectFit:"contain",cursor:"pointer"}} onClick={()=>setExpandedScreenshot(t)}/></div>}
-                    <div style={{marginTop:10}}>
+                    <div style={{marginTop:10,display:"flex",gap:8}}>
                       <button onClick={()=>runAiReview(t)} disabled={aiReviewLoading} className="np dim" style={{fontSize:9,padding:"5px 12px"}}>{aiReviewLoading?"ANALYSING...":"🤖 AI REVIEW"}</button>
                     </div>
                     {t.aiReview&&<div className="review-box">{t.aiReview}</div>}
@@ -762,171 +806,136 @@ export default function App() {
           <div>
             <div style={{marginBottom:20}}><div className="hd" style={{fontSize:20}}>ANALYTICS</div></div>
             {!stats?<div style={{textAlign:"center",padding:"60px 0",color:"#4a6a8a"}}>Log trades to see analytics</div>:(
-              <>
-                {/* R:R Distribution + Hit Rate */}
-                <div className="card" style={{marginBottom:12}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                    <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em"}}>R:R DISTRIBUTION & CUMULATIVE HIT RATE</div>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:16}}>
-                    {RR_BUCKETS.map(b=>{
-                      const d=stats.rrDist[b];const wr=d.count?(d.wins/d.count)*100:0;
-                      return(
-                        <div key={b} style={{background:"#060a0f",border:`1px solid ${d.count>0?"#2a3a50":"#1a2535"}`,borderRadius:3,padding:"10px 8px",textAlign:"center"}}>
-                          <div style={{fontFamily:"'Orbitron'",fontSize:11,fontWeight:900,color:d.count>0?"#f0b429":"#2a3a50",marginBottom:4}}>{b}</div>
-                          <div style={{fontSize:16,fontFamily:"'Orbitron'",fontWeight:900,color:wr>=50?"#4ade80":d.count>0?"#f87171":"#2a3a50"}}>{d.count}</div>
-                          <div style={{fontSize:9,color:"#3a5a7a",marginTop:2}}>{d.count>0?`${wr.toFixed(0)}% WR`:"—"}</div>
-                          {d.count>0&&<div style={{marginTop:6}}><div className="meter-bg"><div style={{width:`${wr}%`,height:"100%",background:wr>=50?"#4ade80":"#f87171",borderRadius:2}}/></div></div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:10}}>CUMULATIVE HIT RATE — % OF ALL TRADES THAT REACHED THIS R</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
-                    {RR_BUCKETS.map(b=>{
-                      const d=stats.rrHitRate[b];
-                      return(
-                        <div key={b} style={{background:"#060a0f",border:`1px solid ${d.count>0?"#1a3050":"#1a2535"}`,borderRadius:3,padding:"10px 8px",textAlign:"center"}}>
-                          <div style={{fontFamily:"'Orbitron'",fontSize:11,fontWeight:900,color:d.count>0?"#60a5fa":"#2a3a50",marginBottom:4}}>{b}</div>
-                          <div style={{fontSize:16,fontFamily:"'Orbitron'",fontWeight:900,color:d.pct>=50?"#4ade80":d.count>0?"#f0b429":"#2a3a50"}}>{d.pct.toFixed(0)}%</div>
-                          <div style={{fontSize:9,color:"#3a5a7a",marginTop:2}}>{d.count} trades</div>
-                          {d.count>0&&<div style={{marginTop:6}}><div className="meter-bg"><div style={{width:`${d.pct}%`,height:"100%",background:"#60a5fa",borderRadius:2}}/></div></div>}
-                        </div>
-                      );
-                    })}
-                  </div>
+              <div className="analytics-layout">
+                {/* Sidebar */}
+                <div className="card" style={{padding:12,position:"sticky",top:72}}>
+                  {ANALYTICS_SECTIONS.map(s=>(
+                    <div key={s.id} className={`analytics-nav-item ${analyticsSection===s.id?"analytics-nav-active":"analytics-nav-inactive"}`} onClick={()=>setAnalyticsSection(s.id)}>{s.label}</div>
+                  ))}
                 </div>
 
-                {/* Confluence performance */}
-                <div className="card" style={{marginBottom:12}}>
-                  <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:14}}>CONFLUENCE PERFORMANCE</div>
-                  {Object.entries(stats.confMap).filter(([,d])=>d.count>0).sort((a,b)=>b[1].pnl-a[1].pnl).map(([conf,d])=>{
-                    const wr=(d.wins/(d.wins+d.losses||1))*100;
-                    return(
-                      <div key={conf} style={{marginBottom:10}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                          <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                            <span className="ct">{conf}</span>
-                            <span style={{fontSize:10,color:"#3a5a7a"}}>{d.count} trades · {wr.toFixed(0)}% WR</span>
-                          </div>
-                          <span style={{fontFamily:"'Orbitron'",fontSize:12,fontWeight:900,color:d.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(d.pnl)}</span>
-                        </div>
-                        <div className="meter-bg"><div style={{width:`${wr}%`,height:"100%",background:wr>=50?"#4ade80":"#f87171",borderRadius:2}}/></div>
-                      </div>
-                    );
-                  })}
-                  {!Object.values(stats.confMap).some(d=>d.count>0)&&<div style={{color:"#3a5a7a",fontSize:11}}>No confluence data yet</div>}
-                </div>
-
-                {/* Time of day distribution */}
-                <div className="card" style={{marginBottom:12}}>
-                  <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:14}}>TIME OF DAY — NY OPEN (9:30–10:30)</div>
-                  <div style={{overflowX:"auto"}}>
-                    <div style={{display:"flex",alignItems:"flex-end",gap:4,height:100,minWidth:600}}>
-                      {TIME_SLOTS.map(slot=>{
-                        const d=stats.timeMap[slot];
-                        const maxCount=Math.max(1,...Object.values(stats.timeMap).map(v=>v.count));
-                        const h=d.count?Math.max(8,(d.count/maxCount)*80):0;
-                        const wr=d.count?(d.wins/d.count)*100:0;
-                        return(
-                          <div key={slot} style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1,minWidth:28}}>
-                            {d.count>0&&<div style={{fontSize:8,color:wr>=50?"#4ade80":"#f87171",marginBottom:2}}>{wr.toFixed(0)}%</div>}
-                            <div style={{width:"100%",height:h,background:d.count>0?(wr>=50?"rgba(74,222,128,0.6)":"rgba(248,113,113,0.6)"):"#1a2535",borderRadius:"2px 2px 0 0",transition:"height 0.3s",position:"relative"}} title={`${slot}: ${d.count} trades, ${wr.toFixed(0)}% WR, ${fmt$(d.pnl)}`}>
-                              {d.count>0&&<div style={{position:"absolute",top:-16,left:"50%",transform:"translateX(-50%)",fontSize:8,color:"#cdd6e0",whiteSpace:"nowrap"}}>{d.count}</div>}
+                {/* Content */}
+                <div>
+                  {analyticsSection==="rr"&&(
+                    <div className="card">
+                      <div style={{fontSize:12,color:"#cdd6e0",letterSpacing:"0.1em",marginBottom:20,fontWeight:500}}>R:R DISTRIBUTION</div>
+                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:16}}>How often you close trades at each R level</div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
+                        {RR_BUCKETS.map(b=>{
+                          const d=stats.rrDist[b]; const wr=d.count?(d.wins/d.count)*100:0;
+                          return(
+                            <div key={b} style={{background:"#060a0f",border:`1px solid ${d.count>0?"#2a3a50":"#1a2535"}`,borderRadius:4,padding:"14px 10px",textAlign:"center"}}>
+                              <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:d.count>0?"#f0b429":"#2a3a50",marginBottom:8}}>{b}</div>
+                              <div style={{fontSize:22,fontFamily:"'Orbitron'",fontWeight:900,color:wr>=50?"#4ade80":d.count>0?"#f87171":"#2a3a50",marginBottom:4}}>{d.count}</div>
+                              <div style={{fontSize:11,color:"#4a6a8a",marginBottom:8}}>{d.count>0?`${wr.toFixed(0)}% WR`:"no trades"}</div>
+                              {d.count>0&&<div className="meter-bg"><div style={{width:`${wr}%`,height:"100%",background:wr>=50?"#4ade80":"#f87171",borderRadius:2}}/></div>}
                             </div>
-                            <div style={{fontSize:7,color:"#2a3a50",marginTop:3,transform:"rotate(-45deg)",transformOrigin:"top left",whiteSpace:"nowrap",marginLeft:6}}>{slot}</div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {analyticsSection==="hitrate"&&(
+                    <div className="card">
+                      <div style={{fontSize:12,color:"#cdd6e0",letterSpacing:"0.1em",marginBottom:8,fontWeight:500}}>CUMULATIVE HIT RATE</div>
+                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>Of all your trades, what % reached at least this R — helps find your optimal take profit</div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
+                        {RR_BUCKETS.map(b=>{
+                          const d=stats.rrHitRate[b];
+                          return(
+                            <div key={b} style={{background:"#060a0f",border:`1px solid ${d.count>0?"#1a3050":"#1a2535"}`,borderRadius:4,padding:"14px 10px",textAlign:"center"}}>
+                              <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:d.count>0?"#60a5fa":"#2a3a50",marginBottom:8}}>{b}</div>
+                              <div style={{fontSize:22,fontFamily:"'Orbitron'",fontWeight:900,color:d.pct>=70?"#4ade80":d.pct>=40?"#f0b429":d.count>0?"#f87171":"#2a3a50",marginBottom:4}}>{d.pct.toFixed(0)}%</div>
+                              <div style={{fontSize:11,color:"#4a6a8a",marginBottom:8}}>{d.count} trades</div>
+                              {d.count>0&&<div className="meter-bg"><div style={{width:`${d.pct}%`,height:"100%",background:"#60a5fa",borderRadius:2}}/></div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {analyticsSection==="confluence"&&(
+                    <div className="card">
+                      <div style={{fontSize:12,color:"#cdd6e0",letterSpacing:"0.1em",marginBottom:20,fontWeight:500}}>CONFLUENCE PERFORMANCE</div>
+                      {Object.entries(stats.confMap).filter(([,d])=>d.count>0).sort((a,b)=>b[1].pnl-a[1].pnl).map(([conf,d])=>{
+                        const wr=(d.wins/(d.wins+d.losses||1))*100;
+                        return(
+                          <div key={conf} style={{marginBottom:16,padding:"14px",background:"#060a0f",border:"1px solid #1a2535",borderRadius:4}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                              <div>
+                                <div style={{fontSize:13,color:"#cdd6e0",marginBottom:4}}>{conf}</div>
+                                <div style={{fontSize:11,color:"#4a6a8a"}}>{d.count} trades · {d.wins}W {d.losses}L</div>
+                              </div>
+                              <div style={{textAlign:"right"}}>
+                                <div style={{fontFamily:"'Orbitron'",fontSize:16,fontWeight:900,color:d.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(d.pnl)}</div>
+                                <div style={{fontSize:12,color:wr>=50?"#4ade80":"#f87171"}}>{wr.toFixed(0)}% WR</div>
+                              </div>
+                            </div>
+                            <div className="meter-bg" style={{height:6}}><div style={{width:`${wr}%`,height:"100%",background:wr>=50?"#4ade80":"#f87171",borderRadius:2}}/></div>
                           </div>
                         );
                       })}
+                      {!Object.values(stats.confMap).some(d=>d.count>0)&&<div style={{color:"#3a5a7a",fontSize:12,padding:"40px 0",textAlign:"center"}}>No confluence data yet — add confluences when logging trades</div>}
                     </div>
-                  </div>
-                  <div style={{display:"flex",gap:16,marginTop:16,fontSize:10,color:"#3a5a7a"}}>
-                    <span><span style={{color:"#4ade80"}}>■</span> Win rate ≥50%</span>
-                    <span><span style={{color:"#f87171"}}>■</span> Win rate &lt;50%</span>
-                    <span>Numbers = trade count · % = win rate</span>
-                  </div>
-                </div>
+                  )}
 
-                <div className="card">
-                  <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:12}}>KEY METRICS</div>
-                  {[["Wins",stats.wins,"#4ade80"],["Losses",stats.losses,"#f87171"],["Breakeven",stats.total-stats.wins-stats.losses,"#f0b429"],["Avg Win",fmt$(stats.avgWin),"#4ade80"],["Avg Loss",fmt$(stats.avgLoss),"#f87171"],["Profit Factor",stats.profitFactor===999?"∞":stats.profitFactor.toFixed(2),stats.profitFactor>=1.5?"#4ade80":"#f87171"],["Max Drawdown",fmt$(stats.maxDD),"#f87171"],["Plan Adherence",`${stats.followedPlanRate.toFixed(0)}%`,stats.followedPlanRate>=70?"#4ade80":"#f0b429"]].map(([l,v,c])=>(
-                    <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #0d1117",fontSize:11}}>
-                      <span style={{color:"#4a6a8a"}}>{l}</span>
-                      <span style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:c}}>{v}</span>
+                  {analyticsSection==="time"&&(
+                    <div className="card">
+                      <div style={{fontSize:12,color:"#cdd6e0",letterSpacing:"0.1em",marginBottom:8,fontWeight:500}}>TIME OF DAY — NY OPEN</div>
+                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:24}}>Win rate and trade count by 5-minute slot from 9:30 to 10:30</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {TIME_SLOTS.map(slot=>{
+                          const d=stats.timeMap[slot];
+                          if(!d)return null;
+                          const wr=d.count?(d.wins/d.count)*100:0;
+                          return(
+                            <div key={slot} style={{display:"grid",gridTemplateColumns:"60px 1fr 60px 80px 80px",gap:12,alignItems:"center",padding:"10px 14px",background:"#060a0f",border:`1px solid ${d.count>0?"#1a2535":"#0d1117"}`,borderRadius:3}}>
+                              <div style={{fontFamily:"'Orbitron'",fontSize:12,fontWeight:700,color:d.count>0?"#cdd6e0":"#2a3a50"}}>{slot}</div>
+                              <div style={{height:10,background:"#1a2535",borderRadius:2,overflow:"hidden"}}>
+                                {d.count>0&&<div style={{width:`${wr}%`,height:"100%",background:wr>=50?"#4ade80":"#f87171",borderRadius:2,transition:"width 0.3s"}}/>}
+                              </div>
+                              <div style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:wr>=50?"#4ade80":d.count>0?"#f87171":"#2a3a50",textAlign:"right"}}>{d.count>0?`${wr.toFixed(0)}%`:"—"}</div>
+                              <div style={{fontSize:11,color:"#4a6a8a",textAlign:"right"}}>{d.count>0?`${d.count} trade${d.count>1?"s":""}`:"—"}</div>
+                              <div style={{fontFamily:"'Orbitron'",fontSize:11,fontWeight:900,color:d.pnl>=0?"#4ade80":d.count>0?"#f87171":"#2a3a50",textAlign:"right"}}>{d.count>0?fmt$(d.pnl):"—"}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div style={{display:"flex",gap:20,marginTop:16,fontSize:11,color:"#3a5a7a",paddingTop:12,borderTop:"1px solid #1a2535"}}>
+                        <span><span style={{color:"#4ade80"}}>■</span> Win rate ≥50%</span>
+                        <span><span style={{color:"#f87171"}}>■</span> Win rate &lt;50%</span>
+                      </div>
                     </div>
-                  ))}
+                  )}
+
+                  {analyticsSection==="metrics"&&(
+                    <div className="card">
+                      <div style={{fontSize:12,color:"#cdd6e0",letterSpacing:"0.1em",marginBottom:20,fontWeight:500}}>KEY METRICS</div>
+                      {[
+                        ["Total Trades",stats.total,"#cdd6e0"],
+                        ["Wins",stats.wins,"#4ade80"],
+                        ["Losses",stats.losses,"#f87171"],
+                        ["Breakeven",stats.total-stats.wins-stats.losses,"#f0b429"],
+                        ["Win Rate",`${stats.winRate.toFixed(1)}%`,stats.winRate>=50?"#4ade80":"#f87171"],
+                        ["Avg Win",fmt$(stats.avgWin),"#4ade80"],
+                        ["Avg Loss",fmt$(stats.avgLoss),"#f87171"],
+                        ["Profit Factor",stats.profitFactor===999?"∞":stats.profitFactor.toFixed(2),stats.profitFactor>=1.5?"#4ade80":"#f87171"],
+                        ["Avg R:R",`${stats.avgRR.toFixed(2)}R`,stats.avgRR>=1.5?"#4ade80":"#4a6a8a"],
+                        ["Max Drawdown",fmt$(stats.maxDD),"#f87171"],
+                        ["Plan Adherence",`${stats.followedPlanRate.toFixed(0)}%`,stats.followedPlanRate>=70?"#4ade80":"#f0b429"],
+                      ].map(([l,v,c])=>(
+                        <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid #0d1117"}}>
+                          <span style={{fontSize:12,color:"#4a6a8a"}}>{l}</span>
+                          <span style={{fontFamily:"'Orbitron'",fontSize:16,fontWeight:900,color:c}}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </>
+              </div>
             )}
-          </div>
-        )}
-
-        {/* CALENDAR */}
-        {view==="calendar"&&(
-          <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:16}}>
-              <div><div className="hd" style={{fontSize:20}}>P&L CALENDAR</div></div>
-              <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                <button onClick={()=>setCalMonth(p=>{const d=new Date(p.y,p.m-1);return{y:d.getFullYear(),m:d.getMonth()};})} className="np dim" style={{padding:"5px 12px"}}>‹</button>
-                <span style={{fontSize:12,color:"#cdd6e0",minWidth:140,textAlign:"center"}}>{MONTHS[calMonth.m]} {calMonth.y}</span>
-                <button onClick={()=>setCalMonth(p=>{const d=new Date(p.y,p.m+1);return{y:d.getFullYear(),m:d.getMonth()};})} className="np dim" style={{padding:"5px 12px"}}>›</button>
-              </div>
-            </div>
-
-            {/* Multi-account filter for calendar */}
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:9,color:"#4a6a8a",letterSpacing:"0.15em",marginBottom:8}}>FILTER BY ACCOUNTS</div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                <button className={`np ${calSelectedAccounts.length===0?"gold":"dim"}`} onClick={()=>setCalSelectedAccounts([])} style={{fontSize:9}}>ALL ACCOUNTS</button>
-                {accounts.map(a=>(
-                  <button key={a.id} className={`np ${calSelectedAccounts.includes(a.id)?"gold":"dim"}`} onClick={()=>setCalSelectedAccounts(prev=>prev.includes(a.id)?prev.filter(x=>x!==a.id):[...prev,a.id])} style={{fontSize:9}}>{a.name}</button>
-                ))}
-              </div>
-            </div>
-
-            {(()=>{
-              const mt=Object.entries(calDayMap).filter(([date])=>{const d=new Date(date);return d.getFullYear()===calMonth.y&&d.getMonth()===calMonth.m;});
-              const mPnl=mt.reduce((s,[,d])=>s+d.pnl,0);
-              const mTrades=mt.reduce((s,[,d])=>s+d.count,0);
-              const mWins=mt.reduce((s,[,d])=>s+d.wins,0);
-              const mLosses=mt.reduce((s,[,d])=>s+d.losses,0);
-              const mWR=mWins+mLosses>0?(mWins/(mWins+mLosses))*100:0;
-              return(
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
-                  {[["MONTH P&L",fmt$(mPnl),mPnl>=0?"#4ade80":"#f87171"],["MONTH TRADES",mTrades,"#cdd6e0"],["WIN RATE",`${mWR.toFixed(0)}%`,mWR>=50?"#4ade80":"#f87171"],["TRADING DAYS",mt.length,"#60a5fa"]].map(([l,v,c])=>(
-                    <div key={l} className="card" style={{padding:12}}>
-                      <div style={{fontSize:8,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:6}}>{l}</div>
-                      <div style={{fontFamily:"'Orbitron'",fontSize:18,fontWeight:900,color:c}}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-
-            <div className="card">
-              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:6}}>
-                {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d=><div key={d} style={{textAlign:"center",fontSize:9,color:"#2a3a50",padding:"4px 0"}}>{d}</div>)}
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-                {Array.from({length:calDays.first}).map((_,i)=><div key={`e${i}`} style={{aspectRatio:"1"}}/>)}
-                {Array.from({length:calDays.total}).map((_,i)=>{
-                  const day=i+1;
-                  const ds=`${calMonth.y}-${String(calMonth.m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-                  const d=calDayMap[ds];
-                  const ht=!!d;
-                  const today=new Date().toISOString().split("T")[0]===ds;
-                  return(
-                    <div key={day} style={{aspectRatio:"1",padding:4,border:`1px solid ${today?"#f0b429":ht?(d.pnl>=0?"rgba(74,222,128,0.3)":"rgba(248,113,113,0.3)"):"#1a2535"}`,borderRadius:3,background:ht?(d.pnl>=0?"rgba(74,222,128,0.06)":"rgba(248,113,113,0.06)"):"#0a0f18",minHeight:60}}>
-                      <div style={{fontSize:9,color:today?"#f0b429":"#2a3a50",marginBottom:2}}>{day}</div>
-                      {ht&&<>
-                        <div style={{fontFamily:"'Orbitron'",fontSize:10,fontWeight:900,color:d.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(d.pnl)}</div>
-                        <div style={{fontSize:8,color:"#3a5a7a"}}>{d.count}t · {d.wins}W {d.losses}L</div>
-                      </>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         )}
 
@@ -940,10 +949,9 @@ export default function App() {
                 <Select value={galleryFilter.confluence} onChange={e=>setGalleryFilter(f=>({...f,confluence:e.target.value}))} options={["All",...confluences]}/>
               </div>
             </div>
-            {!galleryTrades.length?(
-              <div style={{textAlign:"center",padding:"60px 0",color:"#4a6a8a"}}>No screenshots yet — attach charts when logging trades</div>
-            ):(
-              <div className="gallery-grid">
+            {!galleryTrades.length
+              ?<div style={{textAlign:"center",padding:"60px 0",color:"#4a6a8a"}}>No screenshots yet — attach charts when logging trades</div>
+              :<div className="gallery-grid">
                 {galleryTrades.map((t,i)=>{
                   const pnl=parseFloat(t.pnl)||0;
                   const accs=accounts.filter(a=>(t.accountIds||[]).includes(a.id));
@@ -955,28 +963,97 @@ export default function App() {
                         <div style={{position:"absolute",top:8,left:8,fontSize:9,color:t.bias==="Bullish"?"#4ade80":"#f87171",background:"rgba(6,10,15,0.85)",padding:"2px 6px",borderRadius:2}}>● {t.bias}</div>
                       </div>
                       <div style={{padding:"10px 12px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                           <span style={{fontSize:11,color:"#4a6a8a"}}>{t.date} {t.time&&<span style={{color:"#60a5fa"}}>{t.time}</span>}</span>
-                          {t.rr&&<span style={{fontSize:10,color:"#4a6a8a"}}>{t.rr}R</span>}
+                          {t.rr&&<span style={{fontSize:11,color:"#4a6a8a"}}>{t.rr}R</span>}
                         </div>
-                        {(t.confluences||[]).length>0&&(
-                          <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:4}}>
-                            {t.confluences.slice(0,3).map(c=><span key={c} className="ct">{c}</span>)}
-                            {t.confluences.length>3&&<span className="ct">+{t.confluences.length-3}</span>}
-                          </div>
-                        )}
+                        {(t.confluences||[]).length>0&&<div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:4}}>{t.confluences.slice(0,3).map(c=><span key={c} className="ct">{c}</span>)}{t.confluences.length>3&&<span className="ct">+{t.confluences.length-3}</span>}</div>}
                         {accs.length>0&&<div style={{fontSize:9,color:"#f0b429"}}>{accs.map(a=>a.name).join(", ")}</div>}
                       </div>
                     </div>
                   );
                 })}
               </div>
-            )}
+            }
+          </div>
+        )}
+
+        {/* FINANCIALS */}
+        {view==="financials"&&(
+          <div>
+            <div style={{marginBottom:20}}>
+              <div className="hd" style={{fontSize:20}}>FINANCIALS</div>
+              <div style={{color:"#3a5a7a",fontSize:11,marginTop:4}}>Prop firm expenses and payouts</div>
+            </div>
+
+            {/* Summary */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+              {[["TOTAL SPENT ON FEES",fmt$(financialsSummary.totalExpenses),"#f87171"],["TOTAL WITHDRAWN",fmt$(financialsSummary.totalPayouts),"#4ade80"],["NET REAL PROFIT",fmt$(financialsSummary.net),financialsSummary.net>=0?"#4ade80":"#f87171"]].map(([l,v,c])=>(
+                <div key={l} className="card" style={{padding:20}}>
+                  <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em",marginBottom:10}}>{l}</div>
+                  <div style={{fontFamily:"'Orbitron'",fontSize:26,fontWeight:900,color:c}}>{v}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Add transaction */}
+            <div className="card" style={{marginBottom:20,padding:20}}>
+              <div style={{fontSize:11,color:"#cdd6e0",letterSpacing:"0.1em",marginBottom:16,fontWeight:500}}>LOG TRANSACTION</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
+                <div>
+                  <label style={lbl}>Type</label>
+                  <Select value={newTransaction.type} onChange={e=>setNewTransaction(t=>({...t,type:e.target.value}))} options={[{value:"expense",label:"Expense / Fee"},{value:"payout",label:"Payout / Withdrawal"}]}/>
+                </div>
+                <div>
+                  <label style={lbl}>Amount ($)</label>
+                  <input type="number" value={newTransaction.amount} onChange={e=>setNewTransaction(t=>({...t,amount:e.target.value}))} style={{...inp}} placeholder="0.00"/>
+                </div>
+                <div>
+                  <label style={lbl}>Date</label>
+                  <input type="date" value={newTransaction.date} onChange={e=>setNewTransaction(t=>({...t,date:e.target.value}))} style={{...inp}}/>
+                </div>
+                <div>
+                  <label style={lbl}>Account (optional)</label>
+                  <Select value={newTransaction.accountId||""} onChange={e=>setNewTransaction(t=>({...t,accountId:e.target.value}))} options={[{value:"",label:"No account"},...accounts.map(a=>({value:a.id,label:a.name}))]}/>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <input value={newTransaction.notes} onChange={e=>setNewTransaction(t=>({...t,notes:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter"&&newTransaction.amount){setTransactions(prev=>[...prev,{...newTransaction,id:Date.now()}]);setNewTransaction(EMPTY_TRANSACTION);showToast("✓ Transaction logged");}}} style={{...inp,flex:1}} placeholder='e.g. "FTMO 50K challenge fee", "First payout from Apex"...'/>
+                <button className="np gold" style={{padding:"8px 20px",whiteSpace:"nowrap"}} onClick={()=>{if(!newTransaction.amount)return;setTransactions(prev=>[...prev,{...newTransaction,id:Date.now()}]);setNewTransaction(EMPTY_TRANSACTION);showToast("✓ Transaction logged");}}>ADD</button>
+              </div>
+            </div>
+
+            {/* Transaction log */}
+            <div className="card" style={{padding:20}}>
+              <div style={{fontSize:11,color:"#cdd6e0",letterSpacing:"0.1em",marginBottom:16,fontWeight:500}}>TRANSACTION LOG</div>
+              {!transactions.length
+                ?<div style={{textAlign:"center",padding:"40px 0",color:"#3a5a7a",fontSize:12}}>No transactions yet</div>
+                :<div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {[...transactions].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(tx=>{
+                    const linkedAcc=tx.accountId?accounts.find(a=>a.id===tx.accountId):null;
+                    return(
+                      <div key={tx.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"#060a0f",border:`1px solid ${tx.type==="expense"?"#2a1515":"#1a2a1a"}`,borderRadius:3}}>
+                        <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                          <span style={{fontSize:10,padding:"3px 10px",borderRadius:2,background:tx.type==="expense"?"#1a0808":"#081a0e",color:tx.type==="expense"?"#f87171":"#4ade80",border:`1px solid ${tx.type==="expense"?"#3a1515":"#1a5a2a"}`,letterSpacing:"0.1em"}}>{tx.type==="expense"?"EXPENSE":"PAYOUT"}</span>
+                          <span style={{fontSize:12,color:"#cdd6e0"}}>{tx.date}</span>
+                          {linkedAcc&&<span style={{fontSize:10,color:"#f0b429",background:"#1a1400",border:"1px solid #3a2a00",padding:"2px 8px",borderRadius:2}}>{linkedAcc.name}</span>}
+                          {tx.notes&&<span style={{fontSize:11,color:"#4a6a8a",fontStyle:"italic"}}>{tx.notes}</span>}
+                        </div>
+                        <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                          <span style={{fontFamily:"'Orbitron'",fontSize:16,fontWeight:900,color:tx.type==="expense"?"#f87171":"#4ade80"}}>{tx.type==="expense"?"-":"+"}${parseFloat(tx.amount).toFixed(2)}</span>
+                          <button onClick={()=>setTransactions(prev=>prev.filter(t=>t.id!==tx.id))} className="np red" style={{fontSize:9,padding:"4px 10px"}}>DEL</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              }
+            </div>
           </div>
         )}
       </div>
 
-      {/* EXPANDED SCREENSHOT MODAL */}
+      {/* EXPANDED SCREENSHOT */}
       {expandedScreenshot&&(
         <div className="overlay" onClick={()=>setExpandedScreenshot(null)}>
           <div className="modal" style={{maxWidth:1000}} onClick={e=>e.stopPropagation()}>
@@ -989,16 +1066,12 @@ export default function App() {
               <button onClick={()=>setExpandedScreenshot(null)} style={{background:"none",border:"none",color:"#4a6a8a",fontSize:20,cursor:"pointer"}}>✕</button>
             </div>
             <img src={expandedScreenshot.screenshot} alt="chart" style={{width:"100%",borderRadius:4,border:"1px solid #1a2535",marginBottom:14}}/>
-            <div style={{display:"flex",gap:16,fontSize:11,flexWrap:"wrap",marginBottom:10}}>
+            <div style={{display:"flex",gap:16,fontSize:12,flexWrap:"wrap",marginBottom:10}}>
               {[["Entry",expandedScreenshot.entry,"#cdd6e0"],["Exit",expandedScreenshot.exit,"#cdd6e0"],["SL",expandedScreenshot.stopLoss,"#f87171"],["TP",expandedScreenshot.takeProfit,"#4ade80"],["Bias",expandedScreenshot.bias,expandedScreenshot.bias==="Bullish"?"#4ade80":"#f87171"],["Risk",`$${expandedScreenshot.risk||250}`,"#4a6a8a"]].map(([l,v,c])=>(
                 v&&<span key={l} style={{color:"#3a5a7a"}}>{l}: <span style={{color:c}}>{v}</span></span>
               ))}
             </div>
-            {(expandedScreenshot.confluences||[]).length>0&&(
-              <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:10}}>
-                {expandedScreenshot.confluences.map(c=><span key={c} className="ct">{c}</span>)}
-              </div>
-            )}
+            {(expandedScreenshot.confluences||[]).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:10}}>{expandedScreenshot.confluences.map(c=><span key={c} className="ct">{c}</span>)}</div>}
             {expandedScreenshot.notes&&<div style={{fontSize:11,color:"#4a6a8a",fontStyle:"italic",borderLeft:"2px solid #1a2535",paddingLeft:10}}>{expandedScreenshot.notes}</div>}
           </div>
         </div>
@@ -1007,156 +1080,22 @@ export default function App() {
       {/* CONFLUENCE MANAGER */}
       {showConfluenceManager&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowConfluenceManager(false);}}>
-          <div className="modal" style={{maxWidth:500}}>
+          <div className="modal" style={{maxWidth:480}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
               <div className="shd">MANAGE CONFLUENCES</div>
               <button onClick={()=>setShowConfluenceManager(false)} style={{background:"none",border:"none",color:"#4a6a8a",fontSize:20,cursor:"pointer"}}>✕</button>
             </div>
             <div style={{display:"flex",gap:8,marginBottom:16}}>
-              <input value={newConfluence} onChange={e=>setNewConfluence(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"&&newConfluence.trim()){setConfluences(prev=>[...prev,newConfluence.trim()]);setNewConfluence("");}}} style={{...inp,flex:1}} placeholder="Add new confluence..."/>
-              <button className="np gold" onClick={()=>{ if(newConfluence.trim()){setConfluences(prev=>[...prev,newConfluence.trim()]);setNewConfluence("");}}} style={{padding:"8px 16px"}}>ADD</button>
+              <input value={newConfluence} onChange={e=>setNewConfluence(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newConfluence.trim()){setConfluences(prev=>[...prev,newConfluence.trim()]);setNewConfluence("");}}} style={{...inp,flex:1}} placeholder="Add new confluence..."/>
+              <button className="np gold" onClick={()=>{if(newConfluence.trim()){setConfluences(prev=>[...prev,newConfluence.trim()]);setNewConfluence("");}}} style={{padding:"8px 16px"}}>ADD</button>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:400,overflowY:"auto"}}>
               {confluences.map((c,i)=>(
-                <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"#060a0f",border:"1px solid #1a2535",borderRadius:3}}>
+                <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"#060a0f",border:"1px solid #1a2535",borderRadius:3}}>
                   <span style={{fontSize:12,color:"#cdd6e0"}}>{c}</span>
-                  <button onClick={()=>setConfluences(prev=>prev.filter((_,j)=>j!==i))} className="np red" style={{fontSize:9,padding:"3px 8px"}}>REMOVE</button>
+                  <button onClick={()=>setConfluences(prev=>prev.filter((_,j)=>j!==i))} className="np red" style={{fontSize:9,padding:"4px 10px"}}>REMOVE</button>
                 </div>
               ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TRANSACTION MODAL */}
-      {showTransactionModal&&(()=>{
-        const acc=accountStats.find(a=>a.id===showTransactionModal);
-        const acctTx=transactions[showTransactionModal]||[];
-        if(!acc)return null;
-        return(
-          <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowTransactionModal(null);}}>
-            <div className="modal" style={{maxWidth:560}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-                <div><div className="shd">FINANCIALS — {acc.name}</div><div style={{fontSize:10,color:"#3a5a7a",marginTop:4}}>{acc.firm}</div></div>
-                <button onClick={()=>setShowTransactionModal(null)} style={{background:"none",border:"none",color:"#4a6a8a",fontSize:20,cursor:"pointer"}}>✕</button>
-              </div>
-
-              {/* Summary */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:20}}>
-                {[["TOTAL SPENT",fmt$(acc.totalExpenses),"#f87171"],
-                ["TOTAL WITHDRAWN",fmt$(acc.totalPayouts),"#4ade80"],["NET REAL P&L",fmt$(acc.netReal),acc.netReal>=0?"#4ade80":"#f87171"]].map(([l,v,c])=>(
-                  <div key={l} style={{background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"12px"}}>
-                    <div style={{fontSize:8,color:"#3a5a7a",letterSpacing:"0.12em",marginBottom:6}}>{l}</div>
-                    <div style={{fontFamily:"'Orbitron'",fontSize:16,fontWeight:900,color:c}}>{v}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add transaction */}
-              <div style={{background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"14px",marginBottom:16}}>
-                <div style={{fontSize:9,color:"#4a6a8a",letterSpacing:"0.15em",marginBottom:10}}>ADD TRANSACTION</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
-                  <div>
-                    <label style={{display:"block",fontSize:9,color:"#4a6a8a",letterSpacing:"0.12em",marginBottom:4}}>TYPE</label>
-                    <Select value={newTransaction.type} onChange={e=>setNewTransaction(t=>({...t,type:e.target.value}))} options={[{value:"expense",label:"Expense (Fee)"},{value:"payout",label:"Payout (Withdrawal)"}]}/>
-                  </div>
-                  <div>
-                    <label style={{display:"block",fontSize:9,color:"#4a6a8a",letterSpacing:"0.12em",marginBottom:4}}>AMOUNT ($)</label>
-                    <input type="number" value={newTransaction.amount} onChange={e=>setNewTransaction(t=>({...t,amount:e.target.value}))} style={{...inp}} placeholder="0.00"/>
-                  </div>
-                  <div>
-                    <label style={{display:"block",fontSize:9,color:"#4a6a8a",letterSpacing:"0.12em",marginBottom:4}}>DATE</label>
-                    <input type="date" value={newTransaction.date} onChange={e=>setNewTransaction(t=>({...t,date:e.target.value}))} style={{...inp}}/>
-                  </div>
-                </div>
-                <div style={{display:"flex",gap:8}}>
-                  <input value={newTransaction.notes} onChange={e=>setNewTransaction(t=>({...t,notes:e.target.value}))} style={{...inp,flex:1}} placeholder="Notes (e.g. FTMO challenge fee, first payout...)"/>
-                  <button onClick={()=>addTransaction(showTransactionModal)} className="np gold" style={{padding:"8px 16px",whiteSpace:"nowrap"}}>ADD</button>
-                </div>
-              </div>
-
-              {/* Transaction history */}
-              <div style={{maxHeight:280,overflowY:"auto"}}>
-                {!acctTx.length
-                  ?<div style={{textAlign:"center",padding:"24px 0",color:"#3a5a7a",fontSize:11}}>No transactions logged yet</div>
-                  :[...acctTx].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(tx=>(
-                    <div key={tx.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,marginBottom:6}}>
-                      <div style={{display:"flex",gap:12,alignItems:"center"}}>
-                        <span style={{fontSize:9,padding:"2px 8px",borderRadius:2,background:tx.type==="expense"?"#1a0808":"#081a0e",color:tx.type==="expense"?"#f87171":"#4ade80",border:`1px solid ${tx.type==="expense"?"#3a1515":"#1a5a2a"}`}}>{tx.type==="expense"?"EXPENSE":"PAYOUT"}</span>
-                        <span style={{fontSize:11,color:"#cdd6e0"}}>{tx.date}</span>
-                        {tx.notes&&<span style={{fontSize:10,color:"#4a6a8a",fontStyle:"italic"}}>{tx.notes}</span>}
-                      </div>
-                      <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                        <span style={{fontFamily:"'Orbitron'",fontSize:13,fontWeight:900,color:tx.type==="expense"?"#f87171":"#4ade80"}}>{tx.type==="expense"?"-":"+"}${parseFloat(tx.amount).toFixed(2)}</span>
-                        <button onClick={()=>deleteTransaction(showTransactionModal,tx.id)} className="np red" style={{fontSize:8,padding:"3px 8px"}}>DEL</button>
-                      </div>
-                    </div>
-                  ))
-                }
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* TRADOVATE IMPORT MODAL */}
-      {showImportModal&&importPreview&&(
-        <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowImportModal(false);}}>
-          <div className="modal">
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-              <div>
-                <div className="shd">IMPORT TRADES</div>
-                <div style={{fontSize:10,color:"#3a5a7a",marginTop:4}}>{importFileName} · {importPreview.length} trades detected</div>
-              </div>
-              <button onClick={()=>setShowImportModal(false)} style={{background:"none",border:"none",color:"#4a6a8a",fontSize:20,cursor:"pointer"}}>✕</button>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:20}}>
-              <div>
-                <div style={{fontSize:9,color:"#4a6a8a",letterSpacing:"0.15em",marginBottom:10}}>DETECTED TRADES</div>
-                <div style={{overflowX:"auto",maxHeight:380,overflowY:"auto"}}>
-                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                    <thead style={{position:"sticky",top:0,background:"#0a0f18"}}>
-                      <tr style={{borderBottom:"1px solid #1a2535",color:"#3a5a7a"}}>
-                        {["Date","Time","Dir","Entry","Exit","Qty","P&L","R:R","Outcome"].map(h=>(
-                          <th key={h} style={{padding:"6px 8px",fontWeight:400,letterSpacing:"0.08em",fontSize:9,textAlign:"left"}}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {importPreview.map((t,i)=>{
-                        const pnl=parseFloat(t.pnl)||0;
-                        return(
-                          <tr key={i} className="import-row" style={{borderBottom:"1px solid #0d1117"}}>
-                            <td style={{padding:"6px 8px"}}>{t.date}</td>
-                            <td style={{padding:"6px 8px",color:"#60a5fa"}}>{t.time}</td>
-                            <td style={{padding:"6px 8px",color:t.bias==="Bullish"?"#4ade80":"#f87171"}}>{t.bias==="Bullish"?"▲":"▼"}</td>
-                            <td style={{padding:"6px 8px"}}>{t.entry}</td>
-                            <td style={{padding:"6px 8px"}}>{t.exit}</td>
-                            <td style={{padding:"6px 8px",color:"#4a6a8a"}}>{t.contracts}</td>
-                            <td style={{padding:"6px 8px",fontFamily:"'Orbitron'",fontSize:11,fontWeight:900,color:pnl>=0?"#4ade80":"#f87171"}}>{fmt$(pnl)}</td>
-                            <td style={{padding:"6px 8px",color:"#4a6a8a"}}>{t.rr||"—"}</td>
-                            <td style={{padding:"6px 8px",fontSize:9,color:t.outcome==="Win"?"#4ade80":t.outcome==="Loss"?"#f87171":"#f0b429"}}>{t.outcome}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div>
-                <AccountCheckboxes accounts={accounts} selected={importSelectedAccounts} onChange={setImportSelectedAccounts} label="Apply to accounts"/>
-                {importSelectedAccounts.length>0&&(
-                  <div style={{marginTop:12,background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"10px 12px",fontSize:10,color:"#4a6a8a"}}>
-                    {importPreview.length} trades → <span style={{color:"#f0b429"}}>{importSelectedAccounts.length} account{importSelectedAccounts.length>1?"s":""}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div style={{display:"flex",gap:8,marginTop:20}}>
-              <button onClick={confirmTradovateImport} className="np teal" style={{flex:1,padding:11}} disabled={!importSelectedAccounts.length}>
-                CONFIRM IMPORT → {importSelectedAccounts.length} ACCOUNT{importSelectedAccounts.length!==1?"S":""}
-              </button>
-              <button onClick={()=>setShowImportModal(false)} className="np dim" style={{padding:"11px 22px"}}>CANCEL</button>
             </div>
           </div>
         </div>
@@ -1171,35 +1110,13 @@ export default function App() {
               <button onClick={()=>{setShowAccountForm(false);setEditAccountIdx(null);}} style={{background:"none",border:"none",color:"#4a6a8a",fontSize:20,cursor:"pointer"}}>✕</button>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <div style={{gridColumn:"1/-1"}}>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Account Name</label>
-                <input value={accountForm.name} onChange={e=>saf("name",e.target.value)} style={{...inp}} placeholder='e.g. "FTMO 50K #1"'/>
-              </div>
-              <div style={{gridColumn:"1/-1"}}>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Prop Firm</label>
-                <FirmInput value={accountForm.firm} onChange={v=>saf("firm",v)} firms={propFirms}/>
-                <div style={{fontSize:9,color:"#3a5a7a",marginTop:4}}>Type your own firm name — it'll be saved for next time</div>
-              </div>
-              <div>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Phase</label>
-                <Select value={accountForm.phase} onChange={e=>saf("phase",e.target.value)} options={["Phase 1","Phase 2","Funded","Verification"]}/>
-              </div>
-              <div>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Max Total Drawdown (%)</label>
-                <input type="number" value={accountForm.maxTotalDrawdown} onChange={e=>saf("maxTotalDrawdown",e.target.value)} style={{...inp}} placeholder="10"/>
-              </div>
-              <div>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Account Size ($)</label>
-                <input type="number" value={accountForm.size} onChange={e=>saf("size",e.target.value)} style={{...inp}} placeholder="50000"/>
-              </div>
-              <div>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Starting Balance ($)</label>
-                <input type="number" value={accountForm.startingBalance} onChange={e=>saf("startingBalance",e.target.value)} style={{...inp}} placeholder="50000"/>
-              </div>
-              <div style={{gridColumn:"1/-1"}}>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Notes</label>
-                <input value={accountForm.notes} onChange={e=>saf("notes",e.target.value)} style={{...inp}} placeholder="Any notes about this account..."/>
-              </div>
+              <div style={{gridColumn:"1/-1"}}><label style={lbl}>Account Name</label><input value={accountForm.name} onChange={e=>saf("name",e.target.value)} style={{...inp}} placeholder='e.g. "FTMO 50K #1"'/></div>
+              <div style={{gridColumn:"1/-1"}}><label style={lbl}>Prop Firm</label><FirmInput value={accountForm.firm} onChange={v=>saf("firm",v)} firms={propFirms}/><div style={{fontSize:9,color:"#3a5a7a",marginTop:4}}>Type your own — saved for next time</div></div>
+              <div><label style={lbl}>Phase</label><Select value={accountForm.phase} onChange={e=>saf("phase",e.target.value)} options={["Phase 1","Phase 2","Funded","Verification"]}/></div>
+              <div><label style={lbl}>Max Total Drawdown (%)</label><input type="number" value={accountForm.maxTotalDrawdown} onChange={e=>saf("maxTotalDrawdown",e.target.value)} style={{...inp}} placeholder="10"/></div>
+              <div><label style={lbl}>Account Size ($)</label><input type="number" value={accountForm.size} onChange={e=>saf("size",e.target.value)} style={{...inp}} placeholder="50000"/></div>
+              <div><label style={lbl}>Starting Balance ($)</label><input type="number" value={accountForm.startingBalance} onChange={e=>saf("startingBalance",e.target.value)} style={{...inp}} placeholder="50000"/></div>
+              <div style={{gridColumn:"1/-1"}}><label style={lbl}>Notes</label><input value={accountForm.notes} onChange={e=>saf("notes",e.target.value)} style={{...inp}} placeholder="Any notes..."/></div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:20}}>
               <button onClick={handleAccountSubmit} className="np gold" style={{flex:1,padding:11}}>{editAccountIdx!==null?"UPDATE":"ADD ACCOUNT"}</button>
@@ -1228,38 +1145,38 @@ export default function App() {
               <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>e.target.files[0]&&handleScreenshot(e.target.files[0])}/>
             </div>
             <div style={{marginBottom:12}}>
-              <AccountCheckboxes accounts={accounts} selected={form.accountIds||[]} onChange={v=>sf("accountIds",v)} label="Accounts (select all that apply)"/>
+              <AccountCheckboxes accounts={activeAccounts} selected={form.accountIds||[]} onChange={v=>sf("accountIds",v)} label="Accounts (select all that apply)"/>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               {[["Date","date","date"],["Time","time","time"],["Entry Price","entry","number"],["Exit Price","exit","number"],["Stop Loss","stopLoss","number"],["Take Profit","takeProfit","number"],["Contracts","contracts","number"]].map(([l,k,t])=>(
-                <div key={k}><label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>{l}</label><input type={t} value={form[k]} onChange={e=>sf(k,e.target.value)} style={{...inp}}/></div>
+                <div key={k}><label style={lbl}>{l}</label><input type={t} value={form[k]} onChange={e=>sf(k,e.target.value)} style={{...inp}}/></div>
               ))}
               <div>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Risk ($) <span style={{color:"#3a5a7a",fontStyle:"italic"}}>defaults $250</span></label>
+                <label style={lbl}>Risk ($) <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— defaults $250</span></label>
                 <input type="number" value={form.risk} onChange={e=>sf("risk",e.target.value)} style={{...inp}} placeholder="250"/>
               </div>
               <div>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>P&L ($) <span style={{color:"#3a5a7a",fontStyle:"italic"}}>auto-calculates R:R</span></label>
+                <label style={lbl}>P&L ($) <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— auto-calculates R:R</span></label>
                 <input type="number" value={form.pnl} onChange={e=>sf("pnl",e.target.value)} style={{...inp}}/>
               </div>
               <div>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>R:R Achieved <span style={{color:"#3a5a7a",fontStyle:"italic"}}>auto-filled</span></label>
-                <input type="number" value={form.rr} onChange={e=>sf("rr",e.target.value)} style={{...inp,borderColor:form.rr?"#2a3a50":"#1a2535"}} placeholder="auto"/>
+                <label style={lbl}>R:R Achieved <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— auto-filled</span></label>
+                <input type="number" value={form.rr} onChange={e=>sf("rr",e.target.value)} style={{...inp}} placeholder="auto"/>
               </div>
               <div>
-                <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Outcome <span style={{color:"#3a5a7a",fontStyle:"italic"}}>auto-set</span></label>
+                <label style={lbl}>Outcome <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— auto-set</span></label>
                 <Select value={form.outcome} onChange={e=>sf("outcome",e.target.value)} options={OUTCOMES}/>
               </div>
               {[["Bias","bias",BIASES],["Emotion","emotion",EMOTIONS]].map(([l,k,opts])=>(
-                <div key={k}><label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>{l}</label><Select value={form[k]} onChange={e=>sf(k,e.target.value)} options={opts}/></div>
+                <div key={k}><label style={lbl}>{l}</label><Select value={form[k]} onChange={e=>sf(k,e.target.value)} options={opts}/></div>
               ))}
             </div>
             <div style={{marginTop:12}}>
-              <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Confluences ({(form.confluences||[]).length} selected) <button onClick={()=>setShowConfluenceManager(true)} style={{background:"none",border:"none",color:"#60a5fa",fontSize:9,cursor:"pointer",letterSpacing:"0.1em"}}>+ MANAGE</button></label>
+              <label style={lbl}>Confluences ({(form.confluences||[]).length} selected) <button onClick={()=>setShowConfluenceManager(true)} style={{background:"none",border:"none",color:"#60a5fa",fontSize:9,cursor:"pointer",letterSpacing:"0.1em",textTransform:"uppercase"}}>+ Manage</button></label>
               <ConfluenceCheckboxes selected={form.confluences||[]} onChange={v=>sf("confluences",v)} confluences={confluences}/>
             </div>
             <div style={{marginTop:12}}>
-              <label style={{display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"}}>Notes / Trade Rationale</label>
+              <label style={lbl}>Notes</label>
               <textarea value={form.notes} onChange={e=>sf("notes",e.target.value)} style={{...inp,minHeight:65,resize:"vertical"}} placeholder="IFVG formed during NY open, entered on retest..."/>
             </div>
             <div style={{marginTop:10,display:"flex",alignItems:"center",gap:8}}>
@@ -1269,6 +1186,64 @@ export default function App() {
             <div style={{display:"flex",gap:8,marginTop:20}}>
               <button onClick={handleSubmit} className="np gold" style={{flex:1,padding:11}}>{editIdx!==null?"UPDATE TRADE":"LOG TRADE"}</button>
               <button onClick={()=>{setShowForm(false);setEditIdx(null);}} className="np dim" style={{padding:"11px 22px"}}>CANCEL</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT MODAL */}
+      {showImportModal&&importPreview&&(
+        <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowImportModal(false);}}>
+          <div className="modal">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div><div className="shd">IMPORT TRADES</div><div style={{fontSize:10,color:"#3a5a7a",marginTop:4}}>{importFileName} · {importPreview.length} trades detected</div></div>
+              <button onClick={()=>setShowImportModal(false)} style={{background:"none",border:"none",color:"#4a6a8a",fontSize:20,cursor:"pointer"}}>✕</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:20}}>
+              <div>
+                <div style={{fontSize:9,color:"#4a6a8a",letterSpacing:"0.15em",marginBottom:10}}>DETECTED TRADES</div>
+                <div style={{overflowX:"auto",maxHeight:360,overflowY:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                    <thead style={{position:"sticky",top:0,background:"#0a0f18"}}>
+                      <tr style={{borderBottom:"1px solid #1a2535",color:"#3a5a7a"}}>
+                        {["Date","Time","Dir","Entry","Exit","Qty","P&L","R:R","Outcome"].map(h=>(
+                          <th key={h} style={{padding:"6px 8px",fontWeight:400,fontSize:9,textAlign:"left"}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importPreview.map((t,i)=>{
+                        const pnl=parseFloat(t.pnl)||0;
+                        return(
+                          <tr key={i} style={{borderBottom:"1px solid #0d1117"}}>
+                            <td style={{padding:"6px 8px"}}>{t.date}</td>
+                            <td style={{padding:"6px 8px",color:"#60a5fa"}}>{t.time}</td>
+                            <td style={{padding:"6px 8px",color:t.bias==="Bullish"?"#4ade80":"#f87171"}}>{t.bias==="Bullish"?"▲":"▼"}</td>
+                            <td style={{padding:"6px 8px"}}>{t.entry}</td>
+                            <td style={{padding:"6px 8px"}}>{t.exit}</td>
+                            <td style={{padding:"6px 8px",color:"#4a6a8a"}}>{t.contracts}</td>
+                            <td style={{padding:"6px 8px",fontFamily:"'Orbitron'",fontSize:11,fontWeight:900,color:pnl>=0?"#4ade80":"#f87171"}}>{fmt$(pnl)}</td>
+                            <td style={{padding:"6px 8px",color:"#4a6a8a"}}>{t.rr||"—"}</td>
+                            <td style={{padding:"6px 8px",fontSize:9,color:t.outcome==="Win"?"#4ade80":t.outcome==="Loss"?"#f87171":"#f0b429"}}>{t.outcome}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <AccountCheckboxes accounts={activeAccounts} selected={importSelectedAccounts} onChange={setImportSelectedAccounts} label="Apply to accounts"/>
+                {importSelectedAccounts.length>0&&(
+                  <div style={{marginTop:10,background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"10px 12px",fontSize:10,color:"#4a6a8a"}}>
+                    {importPreview.length} trades → <span style={{color:"#f0b429"}}>{importSelectedAccounts.length} account{importSelectedAccounts.length>1?"s":""}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:20}}>
+              <button onClick={confirmTradovateImport} className="np teal" style={{flex:1,padding:11}} disabled={!importSelectedAccounts.length}>CONFIRM IMPORT → {importSelectedAccounts.length} ACCOUNT{importSelectedAccounts.length!==1?"S":""}</button>
+              <button onClick={()=>setShowImportModal(false)} className="np dim" style={{padding:"11px 22px"}}>CANCEL</button>
             </div>
           </div>
         </div>
