@@ -299,13 +299,23 @@ export default function App() {
   },[stats,accountStats,selectedAccount]);
 
   const calDayMap=useMemo(()=>{
-    const filtered=calSelectedAccounts.length>0
-      ?trades.filter(t=>(t.accountIds||[]).some(id=>calSelectedAccounts.includes(id)))
-      :trades;
-    const map={};
-    filtered.forEach(t=>{if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};map[t.date].pnl+=parseFloat(t.pnl)||0;map[t.date].count++;if(t.outcome==="Win")map[t.date].wins++;if(t.outcome==="Loss")map[t.date].losses++;});
-    return map;
-  },[trades,calSelectedAccounts]);
+  const filtered=calSelectedAccounts.length>0
+    ?trades.filter(t=>(t.accountIds||[]).some(id=>calSelectedAccounts.includes(id)))
+    :trades;
+  const map={};
+  filtered.forEach(t=>{
+    if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
+    // Multiply P&L by number of accounts this trade was applied to
+    const accountCount=calSelectedAccounts.length>0
+      ?(t.accountIds||[]).filter(id=>calSelectedAccounts.includes(id)).length
+      :(t.accountIds||[]).length||1;
+    map[t.date].pnl+=(parseFloat(t.pnl)||0)*accountCount;
+    map[t.date].count++;
+    if(t.outcome==="Win")map[t.date].wins++;
+    if(t.outcome==="Loss")map[t.date].losses++;
+  });
+  return map;
+},[trades,calSelectedAccounts]);
 
   const calDays=useMemo(()=>({first:new Date(calMonth.y,calMonth.m,1).getDay(),total:new Date(calMonth.y,calMonth.m+1,0).getDate()}),[calMonth]);
 
