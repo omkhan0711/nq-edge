@@ -14,6 +14,7 @@ for (let h=9;h<=10;h++) for (let m=0;m<60;m+=5) { if(h===10&&m>30)break; TIME_SL
 
 const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", risk:"250", notes:"", emotion:"Calm", followedPlan:true, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
 const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"" };
+const EMPTY_TRANSACTION = { id:"", type:"expense", amount:"", date:new Date().toISOString().split("T")[0], notes:"" };
 
 function useStorage(key, fallback) {
   const [val, setVal] = useState(() => { try { const s=localStorage.getItem(key); return s?JSON.parse(s):fallback; } catch { return fallback; } });
