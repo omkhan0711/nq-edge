@@ -479,7 +479,74 @@ Review: (1) Confluence strength (2) Execution (3) Risk/reward (4) Did they leave
     {id:"summary",label:"Performance Summary"},
     {id:"metrics",label:"Key Metrics"},
   ];
+function TradeSlideshow({ trades, ratingColor }) {
+  const screenshots = useMemo(() => trades.filter(t => t.screenshot).sort((a,b) => new Date(b.date) - new Date(a.date)), [trades]);
+  const [idx, setIdx] = useState(0);
+  const [fade, setFade] = useState(true);
 
+  useEffect(() => {
+    if (!screenshots.length) return;
+    const interval = setInterval(() => {
+      setFade(false);
+      setTimeout(() => {
+        setIdx(i => (i + 1) % screenshots.length);
+        setFade(true);
+      }, 400);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [screenshots.length]);
+
+  if (!screenshots.length) return (
+    <div style={{ background:"#0a0f18", border:"1px solid #1a2535", borderRadius:4, padding:24, textAlign:"center", color:"#2a3a50", fontSize:11 }}>
+      No screenshots yet — attach charts when logging trades
+    </div>
+  );
+
+  const t = screenshots[idx];
+  const pnl = parseFloat(t.pnl) || 0;
+
+  return (
+    <div style={{ background:"#0a0f18", border:"1px solid #1a2535", borderRadius:4, overflow:"hidden", position:"relative" }}>
+      <div style={{ opacity: fade ? 1 : 0, transition:"opacity 0.4s ease", position:"relative" }}>
+        <img src={t.screenshot} alt="trade" style={{ width:"100%", height:260, objectFit:"cover", display:"block" }}/>
+        {/* Gradient overlay */}
+        <div style={{ position:"absolute", inset:0, background:"linear-gradient(to top, rgba(6,10,15,0.95) 0%, rgba(6,10,15,0.3) 50%, transparent 100%)" }}/>
+        {/* Trade info */}
+        <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"16px 20px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end" }}>
+            <div>
+              <div style={{ fontSize:9, color:"#4a6a8a", letterSpacing:"0.15em", marginBottom:4 }}>{t.date} {t.time && <span style={{ color:"#60a5fa" }}>{t.time}</span>}</div>
+              <div style={{ fontFamily:"'Orbitron'", fontSize:24, fontWeight:900, color:t.outcome==="Win"?"#4ade80":t.outcome==="Loss"?"#f87171":"#f0b429" }}>{fmt$(pnl)}</div>
+              {t.rr && <div style={{ fontSize:11, color:"#4a6a8a", marginTop:2 }}>{parseFloat(t.rr) >= 0 ? "+" : ""}{t.rr}R {t.maxPotentialRR && <span style={{ color:"#3a5a7a" }}>/ {t.maxPotentialRR}R max</span>}</div>}
+            </div>
+            <div style={{ textAlign:"right" }}>
+              {t.rating && <div style={{ fontFamily:"'Orbitron'", fontSize:20, fontWeight:900, color:ratingColor(t.rating), marginBottom:4 }}>{t.rating}</div>}
+              <div style={{ fontSize:10, color:t.bias==="Bullish"?"#4ade80":"#f87171" }}>● {t.bias}</div>
+            </div>
+          </div>
+          {(t.confluences||[]).length > 0 && (
+            <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginTop:8 }}>
+              {t.confluences.slice(0,4).map(c => <span key={c} className="ct">{c}</span>)}
+              {t.confluences.length > 4 && <span className="ct">+{t.confluences.length - 4}</span>}
+            </div>
+          )}
+        </div>
+        {/* Top right badge */}
+        <div style={{ position:"absolute", top:12, right:12, background:"rgba(6,10,15,0.8)", border:"1px solid #1a2535", borderRadius:2, padding:"4px 10px", fontSize:9, color:"#4a6a8a", letterSpacing:"0.1em" }}>
+          {idx + 1} / {screenshots.length}
+        </div>
+      </div>
+      {/* Dot indicators */}
+      <div style={{ display:"flex", justifyContent:"center", gap:6, padding:"10px 0", background:"#060a0f" }}>
+        {screenshots.slice(0, 10).map((_, i) => (
+          <div key={i} onClick={() => { setFade(false); setTimeout(() => { setIdx(i); setFade(true); }, 400); }}
+            style={{ width: i === idx ? 16 : 6, height:6, borderRadius:3, background: i === idx ? "#f0b429" : "#1a2535", cursor:"pointer", transition:"all 0.3s" }}/>
+        ))}
+        {screenshots.length > 10 && <div style={{ fontSize:9, color:"#2a3a50" }}>+{screenshots.length - 10}</div>}
+      </div>
+    </div>
+  );
+}
   const ratingColor = r => ({  "A+":"#4ade80","A":"#4ade80","A-":"#86efac","B+":"#f0b429","B":"#f0b429","B-":"#fcd34d","C":"#f87171"}[r]||"#cdd6e0");
 
   return (
@@ -572,6 +639,16 @@ Review: (1) Confluence strength (2) Execution (3) Risk/reward (4) Did they leave
                   ))}
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:16}}>
+  {/* same content as before */}
+</div>
+{/* Slideshow */}
+<div style={{marginBottom:16}}>
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+    <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em"}}>TRADE SCREENSHOTS</div>
+    <button className="np dim" style={{fontSize:9,padding:"4px 10px"}} onClick={()=>setView("screenshots")}>VIEW ALL →</button>
+  </div>
+  <TradeSlideshow trades={trades} ratingColor={ratingColor}/>
+</div>
                   <div className="card">
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                       <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em"}}>EQUITY CURVE</div>
