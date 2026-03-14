@@ -149,6 +149,68 @@ function AccountCheckboxes({ accounts, selected, onChange, label }) {
   );
 }
 
+function TradeSlideshow({ trades, ratingColor, onViewAll }) {
+  const screenshots = useMemo(() => trades.filter(t=>t.screenshot).sort((a,b)=>new Date(b.date)-new Date(a.date)), [trades]);
+  const [idx, setIdx] = useState(0);
+  const [fade, setFade] = useState(true);
+
+  useEffect(() => {
+    if (!screenshots.length) return;
+    const interval = setInterval(() => {
+      setFade(false);
+      setTimeout(() => { setIdx(i=>(i+1)%screenshots.length); setFade(true); }, 400);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [screenshots.length]);
+
+  const goTo = i => { setFade(false); setTimeout(()=>{ setIdx(i); setFade(true); }, 400); };
+
+  if (!screenshots.length) return (
+    <div style={{ background:"#0a0f18", border:"1px solid #1a2535", borderRadius:4, padding:40, textAlign:"center", color:"#2a3a50", fontSize:11 }}>
+      No screenshots yet — attach charts when logging trades
+    </div>
+  );
+
+  const t = screenshots[idx];
+  const pnl = parseFloat(t.pnl)||0;
+
+  return (
+    <div style={{ background:"#0a0f18", border:"1px solid #1a2535", borderRadius:4, overflow:"hidden" }}>
+      <div style={{ opacity:fade?1:0, transition:"opacity 0.4s ease", position:"relative" }}>
+        <img src={t.screenshot} alt="trade" style={{ width:"100%", height:280, objectFit:"cover", display:"block" }}/>
+        <div style={{ position:"absolute", inset:0, background:"linear-gradient(to top, rgba(6,10,15,0.97) 0%, rgba(6,10,15,0.4) 50%, rgba(6,10,15,0.1) 100%)" }}/>
+        <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"20px 24px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end" }}>
+            <div>
+              <div style={{ fontSize:9, color:"#4a6a8a", letterSpacing:"0.15em", marginBottom:6 }}>{t.date}{t.time&&<span style={{ color:"#60a5fa", marginLeft:8 }}>{t.time}</span>}{t.exitTime&&<span style={{ color:"#3a5a7a" }}>→{t.exitTime}</span>}</div>
+              <div style={{ fontFamily:"'Orbitron'", fontSize:28, fontWeight:900, color:t.outcome==="Win"?"#4ade80":t.outcome==="Loss"?"#f87171":"#f0b429", marginBottom:4 }}>{fmt$(pnl)}</div>
+              <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+                {t.rr&&<span style={{ fontSize:12, color:"#4a6a8a" }}>{parseFloat(t.rr)>=0?"+":""}{t.rr}R{t.maxPotentialRR&&<span style={{ color:"#3a5a7a" }}> / {t.maxPotentialRR}R max</span>}</span>}
+                <span style={{ fontSize:11, color:t.bias==="Bullish"?"#4ade80":"#f87171" }}>● {t.bias}</span>
+                {t.asset&&<span style={{ fontSize:10, color:"#60a5fa", background:"rgba(13,26,42,0.8)", padding:"1px 6px", borderRadius:2 }}>{t.asset}</span>}
+              </div>
+              {(t.confluences||[]).length>0&&<div style={{ display:"flex", gap:4, flexWrap:"wrap", marginTop:8 }}>{t.confluences.slice(0,4).map(c=><span key={c} className="ct">{c}</span>)}{t.confluences.length>4&&<span className="ct">+{t.confluences.length-4}</span>}</div>}
+            </div>
+            {t.rating&&<div style={{ fontFamily:"'Orbitron'", fontSize:32, fontWeight:900, color:ratingColor(t.rating), opacity:0.9 }}>{t.rating}</div>}
+          </div>
+        </div>
+        <div style={{ position:"absolute", top:12, right:12, background:"rgba(6,10,15,0.8)", border:"1px solid #1a2535", borderRadius:2, padding:"3px 10px", fontSize:9, color:"#4a6a8a", letterSpacing:"0.1em" }}>{idx+1} / {screenshots.length}</div>
+        <button onClick={()=>goTo((idx-1+screenshots.length)%screenshots.length)} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", background:"rgba(6,10,15,0.7)", border:"1px solid #1a2535", borderRadius:2, color:"#cdd6e0", width:28, height:28, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+        <button onClick={()=>goTo((idx+1)%screenshots.length)} style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"rgba(6,10,15,0.7)", border:"1px solid #1a2535", borderRadius:2, color:"#cdd6e0", width:28, height:28, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+      </div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 16px", background:"#060a0f", borderTop:"1px solid #1a2535" }}>
+        <div style={{ display:"flex", gap:5 }}>
+          {screenshots.slice(0,12).map((_,i)=>(
+            <div key={i} onClick={()=>goTo(i)} style={{ width:i===idx?18:6, height:6, borderRadius:3, background:i===idx?"#f0b429":"#1a2535", cursor:"pointer", transition:"all 0.3s" }}/>
+          ))}
+          {screenshots.length>12&&<div style={{ fontSize:9, color:"#2a3a50", marginLeft:2 }}>+{screenshots.length-12}</div>}
+        </div>
+        <button onClick={onViewAll} className="np dim" style={{ fontSize:9, padding:"3px 10px" }}>VIEW ALL →</button>
+      </div>
+    </div>
+  );
+}
+
 function parseTradovateCSV(text) {
   const lines = text.trim().split("\n");
   const headers = lines[0].split(",").map(h=>h.replace(/"/g,"").trim());
@@ -193,7 +255,6 @@ function parseTradovateCSV(text) {
   if(tradeOrders.length>0)closeTrade(tradeOrders);
   return trades;
 }
-
 export default function App() {
   const [trades, setTrades] = useStorage("nq_trades_v8",[]);
   const [accounts, setAccounts] = useStorage("nq_accounts_v6",[]);
@@ -235,7 +296,6 @@ export default function App() {
   const showToast = (msg,type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const saf = (k,v) => setAccountForm(f=>({...f,[k]:v}));
-
   const activeAccounts = useMemo(()=>accounts.filter(a=>showDormant||!a.dormant),[accounts,showDormant]);
 
   useEffect(()=>{
@@ -294,40 +354,29 @@ export default function App() {
       const slot=`${String(th).padStart(2,"0")}:${String(Math.floor(tm/5)*5).padStart(2,"0")}`;
       if(timeMap[slot]){timeMap[slot].count++;timeMap[slot].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")timeMap[slot].wins++;if(t.outcome==="Loss")timeMap[slot].losses++;}
     });
-
-    // Direction stats
     const longs=tradeList.filter(t=>t.bias==="Bullish");
     const shorts=tradeList.filter(t=>t.bias==="Bearish");
     const longWR=longs.filter(t=>t.outcome!=="Breakeven").length?(longs.filter(t=>t.outcome==="Win").length/longs.filter(t=>t.outcome!=="Breakeven").length)*100:0;
     const shortWR=shorts.filter(t=>t.outcome!=="Breakeven").length?(shorts.filter(t=>t.outcome==="Win").length/shorts.filter(t=>t.outcome!=="Breakeven").length)*100:0;
-
-    // Duration stats
     const withDuration=tradeList.filter(t=>t.time&&t.exitTime&&timeDiffMinutes(t.time,t.exitTime)!==null);
     const avgDuration=withDuration.length?withDuration.reduce((s,t)=>s+(timeDiffMinutes(t.time,t.exitTime)||0),0)/withDuration.length:null;
     const winDuration=wins.filter(t=>t.time&&t.exitTime&&timeDiffMinutes(t.time,t.exitTime)!==null);
     const avgWinDuration=winDuration.length?winDuration.reduce((s,t)=>s+(timeDiffMinutes(t.time,t.exitTime)||0),0)/winDuration.length:null;
     const lossDuration=losses.filter(t=>t.time&&t.exitTime&&timeDiffMinutes(t.time,t.exitTime)!==null);
     const avgLossDuration=lossDuration.length?lossDuration.reduce((s,t)=>s+(timeDiffMinutes(t.time,t.exitTime)||0),0)/lossDuration.length:null;
-
-    // RR vs Potential
     const rrVsPotential=tradeList.filter(t=>t.rr&&t.maxPotentialRR).map(t=>({achieved:parseFloat(t.rr),potential:parseFloat(t.maxPotentialRR),left:parseFloat(t.maxPotentialRR)-parseFloat(t.rr),date:t.date}));
     const avgLeft=rrVsPotential.length?rrVsPotential.reduce((s,t)=>s+t.left,0)/rrVsPotential.length:0;
-
-    // Rating stats
     const ratingMap={};
     TRADE_RATINGS.forEach(r=>ratingMap[r]={count:0,wins:0,losses:0,pnl:0});
     tradeList.forEach(t=>{if(t.rating&&ratingMap[t.rating]){ratingMap[t.rating].count++;ratingMap[t.rating].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")ratingMap[t.rating].wins++;if(t.outcome==="Loss")ratingMap[t.rating].losses++;}});
-
-    // Performance summary
     const dayEntries=Object.entries(dayMap);
-    const bestDay=dayEntries.length?dayEntries.sort((a,b)=>b[1].pnl-a[1].pnl)[0]:null;
-    const worstDay=dayEntries.length?dayEntries.sort((a,b)=>a[1].pnl-b[1].pnl)[0]:null;
+    const bestDay=dayEntries.length?[...dayEntries].sort((a,b)=>b[1].pnl-a[1].pnl)[0]:null;
+    const worstDay=dayEntries.length?[...dayEntries].sort((a,b)=>a[1].pnl-b[1].pnl)[0]:null;
     const dowMap={};
     DAYS_OF_WEEK.forEach(d=>dowMap[d]={count:0,wins:0,losses:0,pnl:0});
     tradeList.forEach(t=>{const dow=DAYS_OF_WEEK[new Date(t.date+"T12:00:00").getDay()];if(dowMap[dow]){dowMap[dow].count++;dowMap[dow].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")dowMap[dow].wins++;if(t.outcome==="Loss")dowMap[dow].losses++;}});
     const mostActiveDay=Object.entries(dowMap).sort((a,b)=>b[1].count-a[1].count)[0];
     const bestWRDay=Object.entries(dowMap).filter(([,d])=>d.count>0).sort((a,b)=>{const awr=a[1].wins/(a[1].wins+a[1].losses||1);const bwr=b[1].wins/(b[1].wins+b[1].losses||1);return bwr-awr;})[0];
-
     return{wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,maxDD,followedPlanRate,dayMap,streak,rrDist,rrHitRate,confMap,timeMap,longs:longs.length,shorts:shorts.length,longWR,shortWR,avgDuration,avgWinDuration,avgLossDuration,rrVsPotential,avgLeft,ratingMap,bestDay,worstDay,mostActiveDay,bestWRDay,dowMap};
   },[confluences]);
 
@@ -399,14 +448,7 @@ export default function App() {
     setAiReviewLoading(true);
     const accs=accounts.filter(a=>(trade.accountIds||[]).includes(a.id));
     try{
-      const review=await callClaude([{role:"user",content:`Review this NQ futures trade:\nDate: ${trade.date} ${trade.time}→${trade.exitTime||"?"}${accs.length?` | Accounts: ${accs.map(a=>a.name).join(", ")}`:""}
-Asset: ${trade.asset||"MNQ"} | Bias: ${trade.bias} | Rating: ${trade.rating||"—"}
-Entry: ${trade.entry} | SL: ${trade.stopLoss} | TP: ${trade.takeProfit} | Exit: ${trade.exit}
-P&L: ${trade.pnl} | R:R: ${trade.rr}R | Max Potential R:R: ${trade.maxPotentialRR||"—"} | Risk: $${trade.risk||250}
-Confluences: ${(trade.confluences||[]).join(", ")||"None"}
-Followed Plan: ${trade.followedPlan} | Emotion: ${trade.emotion}
-Notes: ${trade.notes}
-Review: (1) Confluence strength (2) Execution (3) Risk/reward (4) Did they leave R on the table? (5) Improvement. Under 200 words.`}],
+      const review=await callClaude([{role:"user",content:`Review this NQ futures trade:\nDate: ${trade.date} ${trade.time}→${trade.exitTime||"?"}${accs.length?` | Accounts: ${accs.map(a=>a.name).join(", ")}`:""}\nAsset: ${trade.asset||"MNQ"} | Bias: ${trade.bias} | Rating: ${trade.rating||"—"}\nEntry: ${trade.entry} | SL: ${trade.stopLoss} | TP: ${trade.takeProfit} | Exit: ${trade.exit}\nP&L: ${trade.pnl} | R:R: ${trade.rr}R | Max Potential R:R: ${trade.maxPotentialRR||"—"} | Risk: $${trade.risk||250}\nConfluences: ${(trade.confluences||[]).join(", ")||"None"}\nFollowed Plan: ${trade.followedPlan} | Emotion: ${trade.emotion}\nNotes: ${trade.notes}\nReview: (1) Confluence strength (2) Execution (3) Risk/reward (4) R left on table? (5) Improvement. Under 200 words.`}],
         "You are an elite NQ futures trading coach specialising in ICT concepts. Give specific, actionable feedback.");
       const idx=trades.indexOf(trade);
       if(idx!==-1)setTrades(prev=>prev.map((t,i)=>i===idx?{...t,aiReview:review}:t));
@@ -467,6 +509,7 @@ Review: (1) Confluence strength (2) Execution (3) Risk/reward (4) Did they leave
   const inp={width:"100%",background:"#0d1520",border:"1px solid #2a3a50",borderRadius:3,padding:"8px 10px",color:"#cdd6e0",fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
   const lbl={display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"};
   const activeStats=selectedAccount?accountStats.find(a=>a.id===selectedAccount)?.stats:stats;
+  const ratingColor = r => ({"A+":"#4ade80","A":"#4ade80","A-":"#86efac","B+":"#f0b429","B":"#f0b429","B-":"#fcd34d","C":"#f87171"}[r]||"#cdd6e0");
 
   const ANALYTICS_SECTIONS=[
     {id:"rr",label:"R:R Distribution"},
@@ -479,75 +522,6 @@ Review: (1) Confluence strength (2) Execution (3) Risk/reward (4) Did they leave
     {id:"summary",label:"Performance Summary"},
     {id:"metrics",label:"Key Metrics"},
   ];
-function TradeSlideshow({ trades, ratingColor }) {
-  const screenshots = useMemo(() => trades.filter(t => t.screenshot).sort((a,b) => new Date(b.date) - new Date(a.date)), [trades]);
-  const [idx, setIdx] = useState(0);
-  const [fade, setFade] = useState(true);
-
-  useEffect(() => {
-    if (!screenshots.length) return;
-    const interval = setInterval(() => {
-      setFade(false);
-      setTimeout(() => {
-        setIdx(i => (i + 1) % screenshots.length);
-        setFade(true);
-      }, 400);
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [screenshots.length]);
-
-  if (!screenshots.length) return (
-    <div style={{ background:"#0a0f18", border:"1px solid #1a2535", borderRadius:4, padding:24, textAlign:"center", color:"#2a3a50", fontSize:11 }}>
-      No screenshots yet — attach charts when logging trades
-    </div>
-  );
-
-  const t = screenshots[idx];
-  const pnl = parseFloat(t.pnl) || 0;
-
-  return (
-    <div style={{ background:"#0a0f18", border:"1px solid #1a2535", borderRadius:4, overflow:"hidden", position:"relative" }}>
-      <div style={{ opacity: fade ? 1 : 0, transition:"opacity 0.4s ease", position:"relative" }}>
-        <img src={t.screenshot} alt="trade" style={{ width:"100%", height:260, objectFit:"cover", display:"block" }}/>
-        {/* Gradient overlay */}
-        <div style={{ position:"absolute", inset:0, background:"linear-gradient(to top, rgba(6,10,15,0.95) 0%, rgba(6,10,15,0.3) 50%, transparent 100%)" }}/>
-        {/* Trade info */}
-        <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"16px 20px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end" }}>
-            <div>
-              <div style={{ fontSize:9, color:"#4a6a8a", letterSpacing:"0.15em", marginBottom:4 }}>{t.date} {t.time && <span style={{ color:"#60a5fa" }}>{t.time}</span>}</div>
-              <div style={{ fontFamily:"'Orbitron'", fontSize:24, fontWeight:900, color:t.outcome==="Win"?"#4ade80":t.outcome==="Loss"?"#f87171":"#f0b429" }}>{fmt$(pnl)}</div>
-              {t.rr && <div style={{ fontSize:11, color:"#4a6a8a", marginTop:2 }}>{parseFloat(t.rr) >= 0 ? "+" : ""}{t.rr}R {t.maxPotentialRR && <span style={{ color:"#3a5a7a" }}>/ {t.maxPotentialRR}R max</span>}</div>}
-            </div>
-            <div style={{ textAlign:"right" }}>
-              {t.rating && <div style={{ fontFamily:"'Orbitron'", fontSize:20, fontWeight:900, color:ratingColor(t.rating), marginBottom:4 }}>{t.rating}</div>}
-              <div style={{ fontSize:10, color:t.bias==="Bullish"?"#4ade80":"#f87171" }}>● {t.bias}</div>
-            </div>
-          </div>
-          {(t.confluences||[]).length > 0 && (
-            <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginTop:8 }}>
-              {t.confluences.slice(0,4).map(c => <span key={c} className="ct">{c}</span>)}
-              {t.confluences.length > 4 && <span className="ct">+{t.confluences.length - 4}</span>}
-            </div>
-          )}
-        </div>
-        {/* Top right badge */}
-        <div style={{ position:"absolute", top:12, right:12, background:"rgba(6,10,15,0.8)", border:"1px solid #1a2535", borderRadius:2, padding:"4px 10px", fontSize:9, color:"#4a6a8a", letterSpacing:"0.1em" }}>
-          {idx + 1} / {screenshots.length}
-        </div>
-      </div>
-      {/* Dot indicators */}
-      <div style={{ display:"flex", justifyContent:"center", gap:6, padding:"10px 0", background:"#060a0f" }}>
-        {screenshots.slice(0, 10).map((_, i) => (
-          <div key={i} onClick={() => { setFade(false); setTimeout(() => { setIdx(i); setFade(true); }, 400); }}
-            style={{ width: i === idx ? 16 : 6, height:6, borderRadius:3, background: i === idx ? "#f0b429" : "#1a2535", cursor:"pointer", transition:"all 0.3s" }}/>
-        ))}
-        {screenshots.length > 10 && <div style={{ fontSize:9, color:"#2a3a50" }}>+{screenshots.length - 10}</div>}
-      </div>
-    </div>
-  );
-}
-  const ratingColor = r => ({  "A+":"#4ade80","A":"#4ade80","A-":"#86efac","B+":"#f0b429","B":"#f0b429","B-":"#fcd34d","C":"#f87171"}[r]||"#cdd6e0");
 
   return (
     <div style={{fontFamily:"'IBM Plex Mono','Courier New',monospace",background:"#060a0f",minHeight:"100vh",color:"#cdd6e0",width:"100%"}}>
@@ -612,7 +586,6 @@ function TradeSlideshow({ trades, ratingColor }) {
 
       <div style={{padding:"20px 24px"}}>
 
-        {/* DASHBOARD */}
         {view==="dashboard"&&(
           <div>
             <div style={{marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
@@ -639,16 +612,6 @@ function TradeSlideshow({ trades, ratingColor }) {
                   ))}
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:16}}>
-  {/* same content as before */}
-</div>
-{/* Slideshow */}
-<div style={{marginBottom:16}}>
-  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-    <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em"}}>TRADE SCREENSHOTS</div>
-    <button className="np dim" style={{fontSize:9,padding:"4px 10px"}} onClick={()=>setView("screenshots")}>VIEW ALL →</button>
-  </div>
-  <TradeSlideshow trades={trades} ratingColor={ratingColor}/>
-</div>
                   <div className="card">
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                       <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em"}}>EQUITY CURVE</div>
@@ -673,7 +636,16 @@ function TradeSlideshow({ trades, ratingColor }) {
                     ))}
                   </div>
                 </div>
-                {/* Calendar */}
+
+                {/* SLIDESHOW */}
+                <div style={{marginBottom:16}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em"}}>RECENT TRADES</div>
+                  </div>
+                  <TradeSlideshow trades={trades} ratingColor={ratingColor} onViewAll={()=>setView("screenshots")}/>
+                </div>
+
+                {/* CALENDAR */}
                 <div className="card">
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                     <div className="shd" style={{fontSize:13}}>P&L CALENDAR</div>
@@ -711,7 +683,6 @@ function TradeSlideshow({ trades, ratingColor }) {
           </div>
         )}
 
-        {/* ACCOUNTS */}
         {view==="accounts"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:20}}>
@@ -752,7 +723,6 @@ function TradeSlideshow({ trades, ratingColor }) {
           </div>
         )}
 
-        {/* JOURNAL */}
         {view==="journal"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:20}}>
@@ -767,7 +737,7 @@ function TradeSlideshow({ trades, ratingColor }) {
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {filteredTrades.map((t,i)=>{
-                const oi=trades.indexOf(t); const pnl=parseFloat(t.pnl)||0;
+                const oi=trades.indexOf(t);const pnl=parseFloat(t.pnl)||0;
                 const accs=accounts.filter(a=>(t.accountIds||[]).includes(a.id));
                 const duration=timeDiffMinutes(t.time,t.exitTime);
                 return(
@@ -811,7 +781,6 @@ function TradeSlideshow({ trades, ratingColor }) {
           </div>
         )}
 
-        {/* ANALYTICS */}
         {view==="analytics"&&(
           <div>
             <div style={{marginBottom:20}}><div className="hd" style={{fontSize:20}}>ANALYTICS</div></div>
@@ -842,7 +811,7 @@ function TradeSlideshow({ trades, ratingColor }) {
                   {analyticsSection==="hitrate"&&(
                     <div className="card">
                       <div style={{fontSize:13,color:"#cdd6e0",marginBottom:6,fontWeight:500}}>CUMULATIVE HIT RATE</div>
-                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>% of all trades that reached at least this R — find your optimal take profit</div>
+                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>% of all trades that reached at least this R</div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
                         {RR_BUCKETS.map(b=>{const d=stats.rrHitRate[b];return(
                           <div key={b} style={{background:"#060a0f",border:`1px solid ${d.count>0?"#1a3050":"#1a2535"}`,borderRadius:4,padding:"14px 10px",textAlign:"center"}}>
@@ -858,7 +827,7 @@ function TradeSlideshow({ trades, ratingColor }) {
                   {analyticsSection==="potential"&&(
                     <div className="card">
                       <div style={{fontSize:13,color:"#cdd6e0",marginBottom:6,fontWeight:500}}>ACHIEVED VS POTENTIAL R:R</div>
-                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>How much R you left on the table by exiting early</div>
+                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>How much R you left on the table</div>
                       {!stats.rrVsPotential.length
                         ?<div style={{textAlign:"center",padding:"40px 0",color:"#3a5a7a",fontSize:12}}>No potential R:R data yet — add Max Potential R:R when logging trades</div>
                         :<>
@@ -892,12 +861,12 @@ function TradeSlideshow({ trades, ratingColor }) {
                     <div>
                       <div className="card" style={{marginBottom:12}}>
                         <div style={{fontSize:13,color:"#cdd6e0",marginBottom:6,fontWeight:500}}>DIRECTION SPLIT</div>
-                        <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>Long vs short performance breakdown</div>
+                        <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>Long vs short performance</div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                           {[["LONGS ▲",stats.longs,stats.total,stats.longWR,"#4ade80"],["SHORTS ▼",stats.shorts,stats.total,stats.shortWR,"#f87171"]].map(([label,count,total,wr,color])=>(
                             <div key={label} style={{background:"#060a0f",border:`1px solid ${color==="#4ade80"?"#1a3020":"#3a1515"}`,borderRadius:4,padding:16}}>
-                              <div style={{fontSize:13,color:color,marginBottom:12,fontWeight:700}}>{label}</div>
-                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                              <div style={{fontSize:13,color,marginBottom:12,fontWeight:700}}>{label}</div>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
                                 {[["TRADES",count,"#cdd6e0"],["% OF TOTAL",total?`${((count/total)*100).toFixed(0)}%`:"—","#4a6a8a"],["WIN RATE",`${wr.toFixed(0)}%`,wr>=50?"#4ade80":"#f87171"]].map(([l,v,c])=>(
                                   <div key={l}><div style={{fontSize:9,color:"#3a5a7a",marginBottom:4}}>{l}</div><div style={{fontFamily:"'Orbitron'",fontSize:18,fontWeight:900,color:c}}>{v}</div></div>
                                 ))}
@@ -925,9 +894,9 @@ function TradeSlideshow({ trades, ratingColor }) {
                   {analyticsSection==="ratings"&&(
                     <div className="card">
                       <div style={{fontSize:13,color:"#cdd6e0",marginBottom:6,fontWeight:500}}>TRADE RATINGS</div>
-                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>Performance breakdown by setup quality grade</div>
+                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>Performance by setup quality grade</div>
                       {TRADE_RATINGS.filter(r=>stats.ratingMap[r]?.count>0).map(r=>{
-                        const d=stats.ratingMap[r]; const wr=(d.wins/(d.wins+d.losses||1))*100;
+                        const d=stats.ratingMap[r];const wr=(d.wins/(d.wins+d.losses||1))*100;
                         return(
                           <div key={r} style={{marginBottom:12,padding:"14px 16px",background:"#060a0f",border:"1px solid #1a2535",borderRadius:4}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -941,13 +910,13 @@ function TradeSlideshow({ trades, ratingColor }) {
                           </div>
                         );
                       })}
-                      {!TRADE_RATINGS.some(r=>stats.ratingMap[r]?.count>0)&&<div style={{textAlign:"center",padding:"40px 0",color:"#3a5a7a",fontSize:12}}>No rating data yet — add grades when logging trades</div>}
+                      {!TRADE_RATINGS.some(r=>stats.ratingMap[r]?.count>0)&&<div style={{textAlign:"center",padding:"40px 0",color:"#3a5a7a",fontSize:12}}>No rating data yet</div>}
                     </div>
                   )}
                   {analyticsSection==="confluence"&&(
                     <div className="card">
                       <div style={{fontSize:13,color:"#cdd6e0",marginBottom:6,fontWeight:500}}>CONFLUENCE PERFORMANCE</div>
-                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>Which confluences contribute most to winning trades</div>
+                      <div style={{fontSize:11,color:"#4a6a8a",marginBottom:20}}>Which confluences contribute most to wins</div>
                       {Object.entries(stats.confMap).filter(([,d])=>d.count>0).sort((a,b)=>b[1].pnl-a[1].pnl).map(([conf,d])=>{
                         const wr=(d.wins/(d.wins+d.losses||1))*100;
                         return(
@@ -969,7 +938,7 @@ function TradeSlideshow({ trades, ratingColor }) {
                       <div style={{fontSize:11,color:"#4a6a8a",marginBottom:24}}>Win rate and P&L by 5-minute slot, 9:30–10:30</div>
                       <div style={{display:"flex",flexDirection:"column",gap:6}}>
                         {TIME_SLOTS.map(slot=>{
-                          const d=stats.timeMap[slot]; if(!d)return null;
+                          const d=stats.timeMap[slot];if(!d)return null;
                           const wr=d.count?(d.wins/d.count)*100:0;
                           return(
                             <div key={slot} style={{display:"grid",gridTemplateColumns:"60px 1fr 60px 80px 80px",gap:12,alignItems:"center",padding:"10px 14px",background:"#060a0f",border:`1px solid ${d.count>0?"#1a2535":"#0d1117"}`,borderRadius:3}}>
@@ -1052,7 +1021,6 @@ function TradeSlideshow({ trades, ratingColor }) {
           </div>
         )}
 
-        {/* SCREENSHOTS */}
         {view==="screenshots"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:20}}>
@@ -1065,7 +1033,7 @@ function TradeSlideshow({ trades, ratingColor }) {
             {!galleryTrades.length?<div style={{textAlign:"center",padding:"60px 0",color:"#4a6a8a"}}>No screenshots yet</div>:(
               <div className="gallery-grid">
                 {galleryTrades.map((t,i)=>{
-                  const pnl=parseFloat(t.pnl)||0; const accs=accounts.filter(a=>(t.accountIds||[]).includes(a.id));
+                  const pnl=parseFloat(t.pnl)||0;const accs=accounts.filter(a=>(t.accountIds||[]).includes(a.id));
                   return(
                     <div key={t.id||i} className="gallery-item" onClick={()=>setExpandedScreenshot(t)}>
                       <div style={{position:"relative"}}><img src={t.screenshot} alt="trade" style={{width:"100%",height:160,objectFit:"cover",display:"block"}}/>
@@ -1086,7 +1054,6 @@ function TradeSlideshow({ trades, ratingColor }) {
           </div>
         )}
 
-        {/* FINANCIALS */}
         {view==="financials"&&(
           <div>
             <div style={{marginBottom:20}}><div className="hd" style={{fontSize:20}}>FINANCIALS</div><div style={{color:"#3a5a7a",fontSize:11,marginTop:4}}>Prop firm expenses and payouts</div></div>
@@ -1136,7 +1103,6 @@ function TradeSlideshow({ trades, ratingColor }) {
         )}
       </div>
 
-      {/* EXPANDED SCREENSHOT */}
       {expandedScreenshot&&(
         <div className="overlay" onClick={()=>setExpandedScreenshot(null)}>
           <div className="modal" style={{maxWidth:1000}} onClick={e=>e.stopPropagation()}>
@@ -1160,7 +1126,6 @@ function TradeSlideshow({ trades, ratingColor }) {
         </div>
       )}
 
-      {/* CONFLUENCE MANAGER */}
       {showConfluenceManager&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowConfluenceManager(false);}}>
           <div className="modal" style={{maxWidth:480}}>
@@ -1184,7 +1149,6 @@ function TradeSlideshow({ trades, ratingColor }) {
         </div>
       )}
 
-      {/* ACCOUNT MODAL */}
       {showAccountForm&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget){setShowAccountForm(false);setEditAccountIdx(null);}}}>
           <div className="modal" style={{maxWidth:560}}>
@@ -1209,7 +1173,6 @@ function TradeSlideshow({ trades, ratingColor }) {
         </div>
       )}
 
-      {/* TRADE MODAL */}
       {showForm&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget){setShowForm(false);setEditIdx(null);}}}>
           <div className="modal" style={{maxWidth:740}}>
@@ -1232,26 +1195,11 @@ function TradeSlideshow({ trades, ratingColor }) {
               {[["Date","date","date"],["Time (Entry)","time","time"],["Exit Time","exitTime","time"],["Entry Price","entry","number"],["Exit Price","exit","number"],["Stop Loss","stopLoss","number"],["Take Profit","takeProfit","number"],["Contracts","contracts","number"]].map(([l,k,t])=>(
                 <div key={k}><label style={lbl}>{l}</label><input type={t} value={form[k]} onChange={e=>sf(k,e.target.value)} style={{...inp}}/></div>
               ))}
-              <div>
-                <label style={lbl}>Risk ($) <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— defaults $250</span></label>
-                <input type="number" value={form.risk} onChange={e=>sf("risk",e.target.value)} style={{...inp}} placeholder="250"/>
-              </div>
-              <div>
-                <label style={lbl}>P&L ($) <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— auto-calculates R:R</span></label>
-                <input type="number" value={form.pnl} onChange={e=>sf("pnl",e.target.value)} style={{...inp}}/>
-              </div>
-              <div>
-                <label style={lbl}>R:R Achieved <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— auto-filled</span></label>
-                <input type="number" value={form.rr} onChange={e=>sf("rr",e.target.value)} style={{...inp}} placeholder="auto"/>
-              </div>
-              <div>
-                <label style={lbl}>Max Potential R:R <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— what it could have been</span></label>
-                <input type="number" value={form.maxPotentialRR} onChange={e=>sf("maxPotentialRR",e.target.value)} style={{...inp}} placeholder="e.g. 3"/>
-              </div>
-              <div>
-                <label style={lbl}>Outcome <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— auto-set</span></label>
-                <Select value={form.outcome} onChange={e=>sf("outcome",e.target.value)} options={OUTCOMES}/>
-              </div>
+              <div><label style={lbl}>Risk ($) <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— defaults $250</span></label><input type="number" value={form.risk} onChange={e=>sf("risk",e.target.value)} style={{...inp}} placeholder="250"/></div>
+              <div><label style={lbl}>P&L ($) <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— auto-calculates R:R</span></label><input type="number" value={form.pnl} onChange={e=>sf("pnl",e.target.value)} style={{...inp}}/></div>
+              <div><label style={lbl}>R:R Achieved <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— auto-filled</span></label><input type="number" value={form.rr} onChange={e=>sf("rr",e.target.value)} style={{...inp}} placeholder="auto"/></div>
+              <div><label style={lbl}>Max Potential R:R</label><input type="number" value={form.maxPotentialRR} onChange={e=>sf("maxPotentialRR",e.target.value)} style={{...inp}} placeholder="e.g. 3"/></div>
+              <div><label style={lbl}>Outcome <span style={{color:"#3a5a7a",fontStyle:"italic",textTransform:"none"}}>— auto-set</span></label><Select value={form.outcome} onChange={e=>sf("outcome",e.target.value)} options={OUTCOMES}/></div>
               {[["Bias","bias",BIASES],["Emotion","emotion",EMOTIONS]].map(([l,k,opts])=>(
                 <div key={k}><label style={lbl}>{l}</label><Select value={form[k]} onChange={e=>sf(k,e.target.value)} options={opts}/></div>
               ))}
@@ -1273,7 +1221,6 @@ function TradeSlideshow({ trades, ratingColor }) {
         </div>
       )}
 
-      {/* IMPORT MODAL */}
       {showImportModal&&importPreview&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowImportModal(false);}}>
           <div className="modal">
