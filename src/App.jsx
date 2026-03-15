@@ -149,11 +149,6 @@ function AccountCheckboxes({ accounts, selected, onChange, label }) {
   );
 }
 
-function TradeSlideshow({ trades, ratingColor, onViewAll }) {
-  const screenshots = useMemo(() => trades.filter(t=>t.screenshot).sort((a,b)=>new Date(b.date)-new Date(a.date)), [trades]);
-  const [idx, setIdx] = useState(0);
-  const [fade, setFade] = useState(true);
-
   useEffect(() => {
     if (!screenshots.length) return;
     const interval = setInterval(() => {
@@ -635,14 +630,6 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                </div>
-
-                {/* SLIDESHOW */}
-                <div style={{marginBottom:16}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                    <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.15em"}}>RECENT TRADES</div>
-                  </div>
-                  <TradeSlideshow trades={trades} ratingColor={ratingColor} onViewAll={()=>setView("screenshots")}/>
                 </div>
 
                 {/* CALENDAR */}
