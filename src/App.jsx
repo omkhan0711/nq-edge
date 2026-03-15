@@ -149,63 +149,6 @@ function AccountCheckboxes({ accounts, selected, onChange, label }) {
   );
 }
 
-  useEffect(() => {
-    if (!screenshots.length) return;
-    const interval = setInterval(() => {
-      setFade(false);
-      setTimeout(() => { setIdx(i=>(i+1)%screenshots.length); setFade(true); }, 400);
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [screenshots.length]);
-
-  const goTo = i => { setFade(false); setTimeout(()=>{ setIdx(i); setFade(true); }, 400); };
-
-  if (!screenshots.length) return (
-    <div style={{ background:"#0a0f18", border:"1px solid #1a2535", borderRadius:4, padding:40, textAlign:"center", color:"#2a3a50", fontSize:11 }}>
-      No screenshots yet — attach charts when logging trades
-    </div>
-  );
-
-  const t = screenshots[idx];
-  const pnl = parseFloat(t.pnl)||0;
-
-  return (
-    <div style={{ background:"#0a0f18", border:"1px solid #1a2535", borderRadius:4, overflow:"hidden" }}>
-      <div style={{ opacity:fade?1:0, transition:"opacity 0.4s ease", position:"relative" }}>
-        <img src={t.screenshot} alt="trade" style={{ width:"100%", height:280, objectFit:"cover", display:"block" }}/>
-        <div style={{ position:"absolute", inset:0, background:"linear-gradient(to top, rgba(6,10,15,0.97) 0%, rgba(6,10,15,0.4) 50%, rgba(6,10,15,0.1) 100%)" }}/>
-        <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"20px 24px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end" }}>
-            <div>
-              <div style={{ fontSize:9, color:"#4a6a8a", letterSpacing:"0.15em", marginBottom:6 }}>{t.date}{t.time&&<span style={{ color:"#60a5fa", marginLeft:8 }}>{t.time}</span>}{t.exitTime&&<span style={{ color:"#3a5a7a" }}>→{t.exitTime}</span>}</div>
-              <div style={{ fontFamily:"'Orbitron'", fontSize:28, fontWeight:900, color:t.outcome==="Win"?"#4ade80":t.outcome==="Loss"?"#f87171":"#f0b429", marginBottom:4 }}>{fmt$(pnl)}</div>
-              <div style={{ display:"flex", gap:12, alignItems:"center" }}>
-                {t.rr&&<span style={{ fontSize:12, color:"#4a6a8a" }}>{parseFloat(t.rr)>=0?"+":""}{t.rr}R{t.maxPotentialRR&&<span style={{ color:"#3a5a7a" }}> / {t.maxPotentialRR}R max</span>}</span>}
-                <span style={{ fontSize:11, color:t.bias==="Bullish"?"#4ade80":"#f87171" }}>● {t.bias}</span>
-                {t.asset&&<span style={{ fontSize:10, color:"#60a5fa", background:"rgba(13,26,42,0.8)", padding:"1px 6px", borderRadius:2 }}>{t.asset}</span>}
-              </div>
-              {(t.confluences||[]).length>0&&<div style={{ display:"flex", gap:4, flexWrap:"wrap", marginTop:8 }}>{t.confluences.slice(0,4).map(c=><span key={c} className="ct">{c}</span>)}{t.confluences.length>4&&<span className="ct">+{t.confluences.length-4}</span>}</div>}
-            </div>
-            {t.rating&&<div style={{ fontFamily:"'Orbitron'", fontSize:32, fontWeight:900, color:ratingColor(t.rating), opacity:0.9 }}>{t.rating}</div>}
-          </div>
-        </div>
-        <div style={{ position:"absolute", top:12, right:12, background:"rgba(6,10,15,0.8)", border:"1px solid #1a2535", borderRadius:2, padding:"3px 10px", fontSize:9, color:"#4a6a8a", letterSpacing:"0.1em" }}>{idx+1} / {screenshots.length}</div>
-        <button onClick={()=>goTo((idx-1+screenshots.length)%screenshots.length)} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", background:"rgba(6,10,15,0.7)", border:"1px solid #1a2535", borderRadius:2, color:"#cdd6e0", width:28, height:28, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
-        <button onClick={()=>goTo((idx+1)%screenshots.length)} style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"rgba(6,10,15,0.7)", border:"1px solid #1a2535", borderRadius:2, color:"#cdd6e0", width:28, height:28, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
-      </div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 16px", background:"#060a0f", borderTop:"1px solid #1a2535" }}>
-        <div style={{ display:"flex", gap:5 }}>
-          {screenshots.slice(0,12).map((_,i)=>(
-            <div key={i} onClick={()=>goTo(i)} style={{ width:i===idx?18:6, height:6, borderRadius:3, background:i===idx?"#f0b429":"#1a2535", cursor:"pointer", transition:"all 0.3s" }}/>
-          ))}
-          {screenshots.length>12&&<div style={{ fontSize:9, color:"#2a3a50", marginLeft:2 }}>+{screenshots.length-12}</div>}
-        </div>
-        <button onClick={onViewAll} className="np dim" style={{ fontSize:9, padding:"3px 10px" }}>VIEW ALL →</button>
-      </div>
-    </div>
-  );
-}
-
 function parseTradovateCSV(text) {
   const lines = text.trim().split("\n");
   const headers = lines[0].split(",").map(h=>h.replace(/"/g,"").trim());
@@ -504,7 +447,7 @@ export default function App() {
   const inp={width:"100%",background:"#0d1520",border:"1px solid #2a3a50",borderRadius:3,padding:"8px 10px",color:"#cdd6e0",fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
   const lbl={display:"block",color:"#4a6a8a",fontSize:9,marginBottom:5,letterSpacing:"0.15em",textTransform:"uppercase"};
   const activeStats=selectedAccount?accountStats.find(a=>a.id===selectedAccount)?.stats:stats;
-  const ratingColor = r => ({"A+":"#4ade80","A":"#4ade80","A-":"#86efac","B+":"#f0b429","B":"#f0b429","B-":"#fcd34d","C":"#f87171"}[r]||"#cdd6e0");
+  const ratingColor=r=>({"A+":"#4ade80","A":"#4ade80","A-":"#86efac","B+":"#f0b429","B":"#f0b429","B-":"#fcd34d","C":"#f87171"}[r]||"#cdd6e0");
 
   const ANALYTICS_SECTIONS=[
     {id:"rr",label:"R:R Distribution"},
@@ -555,6 +498,8 @@ export default function App() {
         .gallery-item{cursor:pointer;border-radius:4px;overflow:hidden;border:1px solid #1a2535;transition:all 0.2s;background:#0a0f18}
         .gallery-item:hover{border-color:#f0b429;transform:translateY(-2px)}
         .dormant-badge{font-size:8px;padding:2px 6px;background:#1a1208;color:#f0b429;border:1px solid #3a2a00;border-radius:2px;margin-left:6px}
+        .cal-day{padding:8px;border-radius:3px;min-height:80px;transition:all 0.15s}
+        .cal-day:hover{border-color:#2a3a50!important}
       `}</style>
 
       {toast&&<div className="toast" style={{background:toast.type==="error"?"#1a0808":toast.type==="warn"?"#1a1208":"#081a0e",border:`1px solid ${toast.type==="error"?"#5a1a1a":toast.type==="warn"?"#5a4a0a":"#1a5a2a"}`,color:toast.type==="error"?"#f87171":toast.type==="warn"?"#f0b429":"#4ade80"}}>{toast.msg}</div>}
@@ -606,6 +551,7 @@ export default function App() {
                     <div key={s.l} className="card" style={{padding:14}}><div style={{fontSize:8,color:"#2a3a50",letterSpacing:"0.15em",marginBottom:6}}>{s.l}</div><div style={{fontFamily:"'Orbitron'",fontSize:18,fontWeight:900,color:s.c}}>{s.v}</div></div>
                   ))}
                 </div>
+
                 <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:16}}>
                   <div className="card">
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -632,9 +578,9 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* CALENDAR */}
+                {/* CALENDAR — full width, bigger cells */}
                 <div className="card">
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                     <div className="shd" style={{fontSize:13}}>P&L CALENDAR</div>
                     <div style={{display:"flex",gap:8,alignItems:"center"}}>
                       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
@@ -643,25 +589,54 @@ export default function App() {
                       </div>
                       <div style={{display:"flex",gap:4,alignItems:"center",borderLeft:"1px solid #1a2535",paddingLeft:8}}>
                         <button onClick={()=>setCalMonth(p=>{const d=new Date(p.y,p.m-1);return{y:d.getFullYear(),m:d.getMonth()};})} className="np dim" style={{padding:"4px 10px"}}>‹</button>
-                        <span style={{fontSize:11,color:"#cdd6e0",minWidth:120,textAlign:"center"}}>{MONTHS[calMonth.m]} {calMonth.y}</span>
+                        <span style={{fontSize:12,color:"#cdd6e0",minWidth:130,textAlign:"center",fontFamily:"'Orbitron'",fontWeight:700}}>{MONTHS[calMonth.m]} {calMonth.y}</span>
                         <button onClick={()=>setCalMonth(p=>{const d=new Date(p.y,p.m+1);return{y:d.getFullYear(),m:d.getMonth()};})} className="np dim" style={{padding:"4px 10px"}}>›</button>
                       </div>
                     </div>
                   </div>
+
                   {(()=>{
                     const mt=Object.entries(calDayMap).filter(([date])=>{const d=new Date(date);return d.getFullYear()===calMonth.y&&d.getMonth()===calMonth.m;});
-                    const mPnl=mt.reduce((s,[,d])=>s+d.pnl,0);const mTrades=mt.reduce((s,[,d])=>s+d.count,0);const mWins=mt.reduce((s,[,d])=>s+d.wins,0);const mLosses=mt.reduce((s,[,d])=>s+d.losses,0);const mWR=mWins+mLosses>0?(mWins/(mWins+mLosses))*100:0;
-                    return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>{[["MONTH P&L",fmt$(mPnl),mPnl>=0?"#4ade80":"#f87171"],["TRADES",mTrades,"#cdd6e0"],["WIN RATE",`${mWR.toFixed(0)}%`,mWR>=50?"#4ade80":"#f87171"],["TRADING DAYS",mt.length,"#60a5fa"]].map(([l,v,c])=><div key={l} style={{background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"8px 12px"}}><div style={{fontSize:8,color:"#3a5a7a",letterSpacing:"0.12em",marginBottom:4}}>{l}</div><div style={{fontFamily:"'Orbitron'",fontSize:16,fontWeight:900,color:c}}>{v}</div></div>)}</div>;
+                    const mPnl=mt.reduce((s,[,d])=>s+d.pnl,0);
+                    const mTrades=mt.reduce((s,[,d])=>s+d.count,0);
+                    const mWins=mt.reduce((s,[,d])=>s+d.wins,0);
+                    const mLosses=mt.reduce((s,[,d])=>s+d.losses,0);
+                    const mWR=mWins+mLosses>0?(mWins/(mWins+mLosses))*100:0;
+                    return(
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
+                        {[["MONTH P&L",fmt$(mPnl),mPnl>=0?"#4ade80":"#f87171"],["TRADES",mTrades,"#cdd6e0"],["WIN RATE",`${mWR.toFixed(0)}%`,mWR>=50?"#4ade80":"#f87171"],["TRADING DAYS",mt.length,"#60a5fa"]].map(([l,v,c])=>(
+                          <div key={l} style={{background:"#060a0f",border:"1px solid #1a2535",borderRadius:3,padding:"12px 16px"}}>
+                            <div style={{fontSize:9,color:"#3a5a7a",letterSpacing:"0.12em",marginBottom:6}}>{l}</div>
+                            <div style={{fontFamily:"'Orbitron'",fontSize:20,fontWeight:900,color:c}}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
                   })()}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:4}}>{["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d=><div key={d} style={{textAlign:"center",fontSize:8,color:"#2a3a50",padding:"3px 0"}}>{d}</div>)}</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5,marginBottom:6}}>
+                    {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d=>(
+                      <div key={d} style={{textAlign:"center",fontSize:10,color:"#3a5a7a",padding:"6px 0",letterSpacing:"0.1em"}}>{d}</div>
+                    ))}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5}}>
                     {Array.from({length:calDays.first}).map((_,i)=><div key={`e${i}`}/>)}
                     {Array.from({length:calDays.total}).map((_,i)=>{
-                      const day=i+1;const ds=`${calMonth.y}-${String(calMonth.m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;const d=calDayMap[ds];const ht=!!d;const today=new Date().toISOString().split("T")[0]===ds;
-                      return <div key={day} style={{padding:4,border:`1px solid ${today?"#f0b429":ht?(d.pnl>=0?"rgba(74,222,128,0.3)":"rgba(248,113,113,0.3)"):"#1a2535"}`,borderRadius:3,background:ht?(d.pnl>=0?"rgba(74,222,128,0.05)":"rgba(248,113,113,0.05)"):"#060a0f",minHeight:52}}>
-                        <div style={{fontSize:9,color:today?"#f0b429":"#2a3a50",marginBottom:2}}>{day}</div>
-                        {ht&&<><div style={{fontFamily:"'Orbitron'",fontSize:9,fontWeight:900,color:d.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(d.pnl)}</div><div style={{fontSize:8,color:"#3a5a7a"}}>{d.count}t {d.wins}W {d.losses}L</div></>}
-                      </div>;
+                      const day=i+1;
+                      const ds=`${calMonth.y}-${String(calMonth.m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+                      const d=calDayMap[ds]; const ht=!!d;
+                      const today=new Date().toISOString().split("T")[0]===ds;
+                      return(
+                        <div key={day} className="cal-day" style={{border:`1px solid ${today?"#f0b429":ht?(d.pnl>=0?"rgba(74,222,128,0.35)":"rgba(248,113,113,0.35)"):"#1a2535"}`,background:ht?(d.pnl>=0?"rgba(74,222,128,0.06)":"rgba(248,113,113,0.06)"):"#060a0f"}}>
+                          <div style={{fontSize:11,color:today?"#f0b429":"#3a5a7a",marginBottom:6,fontWeight:today?700:400}}>{day}</div>
+                          {ht&&(
+                            <>
+                              <div style={{fontFamily:"'Orbitron'",fontSize:12,fontWeight:900,color:d.pnl>=0?"#4ade80":"#f87171",marginBottom:3}}>{fmt$(d.pnl)}</div>
+                              <div style={{fontSize:10,color:"#3a5a7a"}}>{d.count}t · {d.wins}W {d.losses}L</div>
+                            </>
+                          )}
+                        </div>
+                      );
                     })}
                   </div>
                 </div>
