@@ -324,7 +324,15 @@ export default function App() {
     return{wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,maxDD,followedPlanRate,dayMap,streak,rrDist,rrHitRate,confMap,timeMap,longs:longs.length,shorts:shorts.length,longWR,shortWR,avgDuration,avgWinDuration,avgLossDuration,rrVsPotential,avgLeft,ratingMap,bestDay,worstDay,mostActiveDay,bestWRDay,dowMap};
   },[confluences]);
 
-  const stats=useMemo(()=>computeStats(trades.filter(t=>!t.excludeFromAnalytics)),[trades,computeStats]);
+  const stats=useMemo(()=>{
+    const base=computeStats(trades.filter(t=>!t.excludeFromAnalytics));
+    if(!base)return null;
+    const allAccountsPnl=accounts.reduce((sum,acc)=>{
+      const accTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id)&&!t.excludeFromAnalytics);
+      return sum+accTrades.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0);
+    },0);
+    return {...base,totalPnl:allAccountsPnl};
+  },[trades,accounts,computeStats]);
   const accountStats=useMemo(()=>accounts.map(acc=>{
     const accTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id)&&!t.excludeFromAnalytics);
     const s=computeStats(accTrades);
