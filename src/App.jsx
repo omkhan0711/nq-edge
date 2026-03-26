@@ -17,7 +17,7 @@ for (let h=9;h<=10;h++) for (let m=0;m<60;m+=5) { if(h===10&&m>30)break; TIME_SL
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"A", notes:"", emotion:"Calm", followedPlan:true, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
+const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"A", notes:"", emotion:"Calm", followedPlan:true, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
 const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false };
 const EMPTY_TRANSACTION = { id:"", type:"expense", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"" };
 
@@ -324,9 +324,9 @@ export default function App() {
     return{wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,maxDD,followedPlanRate,dayMap,streak,rrDist,rrHitRate,confMap,timeMap,longs:longs.length,shorts:shorts.length,longWR,shortWR,avgDuration,avgWinDuration,avgLossDuration,rrVsPotential,avgLeft,ratingMap,bestDay,worstDay,mostActiveDay,bestWRDay,dowMap};
   },[confluences]);
 
-  const stats=useMemo(()=>computeStats(trades),[trades,computeStats]);
+  const stats=useMemo(()=>computeStats(trades.filter(t=>!t.excludeFromAnalytics)),[trades,computeStats]);
   const accountStats=useMemo(()=>accounts.map(acc=>{
-    const accTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id));
+    const accTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id)&&!t.excludeFromAnalytics);
     const s=computeStats(accTrades);
     const startBal=parseFloat(acc.startingBalance||acc.size)||50000;
     const pnl=s?.totalPnl||0;
@@ -354,8 +354,7 @@ export default function App() {
     const map={};
     filtered.forEach(t=>{
       if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
-      const accountCount=calSelectedAccounts.length>0?(t.accountIds||[]).filter(id=>calSelectedAccounts.includes(id)).length:(t.accountIds||[]).length||1;
-      map[t.date].pnl+=(parseFloat(t.pnl)||0)*accountCount;
+      map[t.date].pnl+=(parseFloat(t.pnl)||0);
       map[t.date].count++;
       if(t.outcome==="Win")map[t.date].wins++;
       if(t.outcome==="Loss")map[t.date].losses++;
@@ -604,14 +603,13 @@ export default function App() {
             ):(
               <>
                 {/* Stats row */}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:8,marginBottom:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8,marginBottom:16}}>
                   {[
                     {l:"Total P&L",v:fmt$(activeStats?.totalPnl||0),c:(activeStats?.totalPnl||0)>=0?"#4ade80":"#f87171"},
                     {l:"Win Rate",v:`${(activeStats?.winRate||0).toFixed(1)}%`,c:(activeStats?.winRate||0)>=50?"#4ade80":"#f87171"},
                     {l:"Profit Factor",v:(activeStats?.profitFactor||0)===999?"∞":(activeStats?.profitFactor||0).toFixed(2),c:(activeStats?.profitFactor||0)>=1.5?"#4ade80":"#f87171"},
                     {l:"Avg R:R",v:`${(activeStats?.avgRR||0).toFixed(2)}R`,c:"#93c5fd"},
                     {l:"Trades",v:activeStats?.total||0,c:"#e2e8f0"},
-                    {l:"Max Drawdown",v:fmt$(activeStats?.maxDD||0),c:"#f87171"},
                     {l:"Plan %",v:`${(activeStats?.followedPlanRate||0).toFixed(0)}%`,c:(activeStats?.followedPlanRate||0)>=70?"#4ade80":"#fbbf24"},
                     {l:"Streak",v:(activeStats?.streak||0)>0?`+${activeStats.streak}W`:(activeStats?.streak||0)<0?`${Math.abs(activeStats.streak)}L`:"—",c:(activeStats?.streak||0)>0?"#4ade80":(activeStats?.streak||0)<0?"#f87171":"#4a5568"}
                   ].map(s=>(
@@ -653,8 +651,6 @@ export default function App() {
                             <div style={{fontSize:10,color:a.gainPct>=0?"#4ade80":"#f87171"}}>{a.gainPct>=0?"+":""}{a.gainPct.toFixed(2)}%</div>
                           </div>
                         </div>
-                        <div style={{fontSize:10,color:"#334155",marginBottom:4}}>DD {a.ddPct.toFixed(1)}% / {a.ddLimit}%</div>
-                        <div className="bar-bg"><div style={{width:`${Math.min(100,(a.ddPct/a.ddLimit)*100)}%`,height:"100%",background:a.ddPct/a.ddLimit>0.7?"#f87171":a.ddPct/a.ddLimit>0.4?"#fbbf24":"#4ade80",transition:"width 0.3s"}}/></div>
                       </div>
                     ))}
                   </div>
@@ -752,7 +748,6 @@ export default function App() {
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
                 {accountStats.filter(a=>showDormant||!a.dormant).map((a)=>{
                   const realIdx=accounts.findIndex(ac=>ac.id===a.id);
-                  const ddColor=a.ddPct/a.ddLimit>0.7?"#f87171":a.ddPct/a.ddLimit>0.4?"#fbbf24":"#4ade80";
                   return(
                     <div key={a.id} className="card" style={{padding:22,opacity:a.dormant?0.55:1}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
@@ -776,13 +771,6 @@ export default function App() {
                             <div className="mono" style={{fontSize:14,fontWeight:500,color:c}}>{v}</div>
                           </div>
                         ))}
-                      </div>
-                      <div style={{marginBottom:12}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                          <span style={{fontSize:11,color:"#334155"}}>Drawdown</span>
-                          <span className="mono" style={{fontSize:11,color:ddColor}}>{a.ddPct.toFixed(2)}% / {a.ddLimit}%</span>
-                        </div>
-                        <div className="bar-bg" style={{height:5}}><div style={{width:`${Math.min(100,(a.ddPct/a.ddLimit)*100)}%`,height:"100%",background:ddColor,borderRadius:3,transition:"width 0.3s"}}/></div>
                       </div>
                       <div style={{background:"#090e14",border:"1px solid #141c26",borderRadius:7,padding:"10px 14px",marginBottom:14}}>
                         <div className="section-title" style={{marginBottom:8}}>Financials</div>
@@ -845,6 +833,7 @@ export default function App() {
                         {t.rating&&<span style={{fontSize:12,fontWeight:600,color:ratingColor(t.rating)}}>{t.rating}</span>}
                         {accs.map(a=><span key={a.id} style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",padding:"2px 8px",borderRadius:5}}>{a.name}</span>)}
                         {!t.followedPlan&&<span style={{fontSize:11,color:"#fbbf24"}}>⚠ Off-plan</span>}
+                        {t.excludeFromAnalytics&&<span style={{fontSize:11,color:"#f87171",background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",padding:"2px 8px",borderRadius:5}}>Excluded</span>}
                       </div>
                       <div style={{display:"flex",gap:8,alignItems:"center"}}>
                         <div style={{textAlign:"right"}}>
@@ -1312,7 +1301,6 @@ export default function App() {
               <div style={{gridColumn:"1/-1"}}><label style={lbl}>Account Name</label><input value={accountForm.name} onChange={e=>saf("name",e.target.value)} style={inp} placeholder='e.g. "FTMO 50K #1"'/></div>
               <div style={{gridColumn:"1/-1"}}><label style={lbl}>Prop Firm</label><FirmInput value={accountForm.firm} onChange={v=>saf("firm",v)} firms={propFirms}/><div style={{fontSize:11,color:"#334155",marginTop:4}}>Type your own — saved for next time</div></div>
               <div><label style={lbl}>Phase</label><Select value={accountForm.phase} onChange={e=>saf("phase",e.target.value)} options={["Phase 1","Phase 2","Funded","Verification"]}/></div>
-              <div><label style={lbl}>Max Total Drawdown (%)</label><input type="number" value={accountForm.maxTotalDrawdown} onChange={e=>saf("maxTotalDrawdown",e.target.value)} style={inp} placeholder="10"/></div>
               <div><label style={lbl}>Account Size ($)</label><input type="number" value={accountForm.size} onChange={e=>saf("size",e.target.value)} style={inp} placeholder="50000"/></div>
               <div><label style={lbl}>Starting Balance ($)</label><input type="number" value={accountForm.startingBalance} onChange={e=>saf("startingBalance",e.target.value)} style={inp} placeholder="50000"/></div>
               <div style={{gridColumn:"1/-1"}}><label style={lbl}>Notes</label><input value={accountForm.notes} onChange={e=>saf("notes",e.target.value)} style={inp} placeholder="Any notes..."/></div>
@@ -1389,6 +1377,11 @@ export default function App() {
             <div style={{marginTop:12,display:"flex",alignItems:"center",gap:10}}>
               <input type="checkbox" id="fp" checked={form.followedPlan} onChange={e=>sf("followedPlan",e.target.checked)} style={{accentColor:"#3b82f6",width:14,height:14,cursor:"pointer"}}/>
               <label htmlFor="fp" style={{fontSize:12,color:"#4a5568",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Followed trading plan</label>
+            </div>
+
+            <div style={{marginTop:10,display:"flex",alignItems:"center",gap:10}}>
+              <input type="checkbox" id="efa" checked={form.excludeFromAnalytics||false} onChange={e=>sf("excludeFromAnalytics",e.target.checked)} style={{accentColor:"#f87171",width:14,height:14,cursor:"pointer"}}/>
+              <label htmlFor="efa" style={{fontSize:12,color:"#4a5568",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Exclude from analytics</label>
             </div>
 
             <div style={{display:"flex",gap:8,marginTop:24}}>
