@@ -358,15 +358,29 @@ export default function App() {
   },[stats,accountStats,selectedAccount]);
 
   const calDayMap=useMemo(()=>{
-    const filtered=calSelectedAccounts.length>0?trades.filter(t=>(t.accountIds||[]).some(id=>calSelectedAccounts.includes(id))):trades;
     const map={};
-    filtered.forEach(t=>{
-      if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
-      map[t.date].pnl+=(parseFloat(t.pnl)||0);
-      map[t.date].count++;
-      if(t.outcome==="Win")map[t.date].wins++;
-      if(t.outcome==="Loss")map[t.date].losses++;
-    });
+    if(calSelectedAccounts.length>0){
+      // Specific accounts selected: count each trade once per selected account it belongs to
+      trades.forEach(t=>{
+        const matchingAccounts=(t.accountIds||[]).filter(id=>calSelectedAccounts.includes(id));
+        if(!matchingAccounts.length)return;
+        if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
+        map[t.date].pnl+=(parseFloat(t.pnl)||0)*matchingAccounts.length;
+        map[t.date].count++;
+        if(t.outcome==="Win")map[t.date].wins++;
+        if(t.outcome==="Loss")map[t.date].losses++;
+      });
+    } else {
+      // All accounts: sum P&L once per account the trade is linked to
+      trades.forEach(t=>{
+        const accountCount=(t.accountIds||[]).length||1;
+        if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
+        map[t.date].pnl+=(parseFloat(t.pnl)||0)*accountCount;
+        map[t.date].count++;
+        if(t.outcome==="Win")map[t.date].wins++;
+        if(t.outcome==="Loss")map[t.date].losses++;
+      });
+    }
     return map;
   },[trades,calSelectedAccounts]);
 
