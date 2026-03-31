@@ -19,7 +19,8 @@ const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday
 
 const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"A", notes:"", emotion:"Calm", followedPlan:true, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
 const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false };
-const EMPTY_TRANSACTION = { id:"", type:"expense", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"" };
+const EMPTY_TRANSACTION = { id:"", type:"expense", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"", accountStatus:"" };
+// accountStatus: "" | "passed" | "failed" | "payout_received"
 
 function useStorage(key, fallback) {
   const [val, setVal] = useState(() => { try { const s=localStorage.getItem(key); return s?JSON.parse(s):fallback; } catch { return fallback; } });
@@ -233,6 +234,7 @@ export default function App() {
   const [importFileName, setImportFileName] = useState("");
   const [importSelectedAccounts, setImportSelectedAccounts] = useState([]);
   const [galleryFilter, setGalleryFilter] = useState({ outcome:"All", confluence:"All" });
+  const [editingTransaction, setEditingTransaction] = useState(null); // holds tx being edited
   const [expandedScreenshot, setExpandedScreenshot] = useState(null);
   const fileRef = useRef();
   const tvRef = useRef();
@@ -390,6 +392,59 @@ export default function App() {
   const galleryTrades=useMemo(()=>trades.filter(t=>t.screenshot&&(galleryFilter.outcome==="All"||t.outcome===galleryFilter.outcome)&&(galleryFilter.confluence==="All"||(t.confluences||[]).includes(galleryFilter.confluence))).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,galleryFilter]);
   const financialsSummary=useMemo(()=>({totalExpenses:transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0),totalPayouts:transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0),net:transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0)-transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0)}),[transactions]);
 
+  // ─── PROP FIRM STATS ───
+  const propFirmStats = useMemo(()=>{
+    // Group transactions by account
+    const accMap = {};
+    accounts.forEach(a => {
+      accMap[a.id] = { account:a, txs:[], passed:false, failed:false, payoutReceived:false, totalSpent:0, totalPayout:0 };
+    });
+    transactions.forEach(tx => {
+      if(tx.accountId && accMap[tx.accountId]) {
+        accMap[tx.accountId].txs.push(tx);
+        const amt = parseFloat(tx.amount)||0;
+        if(tx.type==="expense") accMap[tx.accountId].totalSpent += amt;
+        if(tx.type==="payout") accMap[tx.accountId].totalPayout += amt;
+        if(tx.accountStatus==="passed") accMap[tx.accountId].passed = true;
+        if(tx.accountStatus==="failed") accMap[tx.accountId].failed = true;
+        if(tx.accountStatus==="payout_received") { accMap[tx.accountId].payoutReceived = true; accMap[tx.accountId].passed = true; }
+      }
+    });
+    const accsWithTxs = Object.values(accMap).filter(a=>a.txs.length>0);
+    const totalAccounts = accsWithTxs.length;
+    const passed = accsWithTxs.filter(a=>a.passed).length;
+    const failed = accsWithTxs.filter(a=>a.failed && !a.passed).length;
+    const payoutReceived = accsWithTxs.filter(a=>a.payoutReceived).length;
+    const passRate = totalAccounts ? (passed/totalAccounts)*100 : 0;
+    const failRate = totalAccounts ? (failed/totalAccounts)*100 : 0;
+    const payoutRate = passed ? (payoutReceived/passed)*100 : 0;
+    // EV = (passRate/100 * avgPayoutOnPass) - (failRate/100 * avgCostOnFail) - overhead on passes
+    const avgSpend = accsWithTxs.length ? accsWithTxs.reduce((s,a)=>s+a.totalSpent,0)/accsWithTxs.length : 0;
+    const passedAccs = accsWithTxs.filter(a=>a.passed);
+    const failedAccs = accsWithTxs.filter(a=>a.failed && !a.passed);
+    const avgPayoutOnPass = passedAccs.length ? passedAccs.reduce((s,a)=>s+a.totalPayout,0)/passedAccs.length : 0;
+    const avgSpendOnFail = failedAccs.length ? failedAccs.reduce((s,a)=>s+a.totalSpent,0)/failedAccs.length : 0;
+    const avgSpendOnPass = passedAccs.length ? passedAccs.reduce((s,a)=>s+a.totalSpent,0)/passedAccs.length : 0;
+    // EV per account attempt = P(pass)*avgNetOnPass + P(fail)*avgNetOnFail
+    const pPass = passRate/100; const pFail = failRate/100; const pUnresolved = 1 - pPass - pFail;
+    const evPerAttempt = (pPass * (avgPayoutOnPass - avgSpendOnPass)) + (pFail * (-avgSpendOnFail));
+    const totalSpent = transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+    const totalPayouts = transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+    // By firm
+    const firmMap = {};
+    accsWithTxs.forEach(a=>{
+      const firm = a.account.firm||"Unknown";
+      if(!firmMap[firm]) firmMap[firm]={firm,count:0,passed:0,failed:0,payouts:0,spent:0,payout:0};
+      firmMap[firm].count++;
+      firmMap[firm].spent += a.totalSpent;
+      firmMap[firm].payout += a.totalPayout;
+      if(a.passed) firmMap[firm].passed++;
+      if(a.failed && !a.passed) firmMap[firm].failed++;
+      if(a.payoutReceived) firmMap[firm].payouts++;
+    });
+    return { totalAccounts,passed,failed,payoutReceived,passRate,failRate,payoutRate,avgSpend,avgPayoutOnPass,avgSpendOnFail,evPerAttempt,totalSpent,totalPayouts,net:totalPayouts-totalSpent,accsWithTxs,firmMap:Object.values(firmMap),pUnresolved };
+  },[accounts,transactions]);
+
   const handleScreenshot=useCallback(async(file)=>{
     if(!file)return;
     const reader=new FileReader();
@@ -484,6 +539,7 @@ export default function App() {
     {id:"time",label:"Time of Day"},
     {id:"summary",label:"Performance Summary"},
     {id:"metrics",label:"Key Metrics"},
+    {id:"propfirm",label:"Prop Firm Stats"},
   ];
 
   // Shared input style
@@ -1150,6 +1206,128 @@ export default function App() {
                       ))}
                     </div>
                   )}
+                  {analyticsSection==="propfirm"&&(
+                    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                      {/* Top summary cards */}
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+                        {[
+                          ["Accounts Tracked",propFirmStats.totalAccounts,"#e2e8f0","Total accounts with transactions"],
+                          ["Pass Rate",propFirmStats.totalAccounts?`${propFirmStats.passRate.toFixed(1)}%`:"—",propFirmStats.passRate>=50?"#4ade80":"#f87171","% of accounts passed/funded"],
+                          ["Fail Rate",propFirmStats.totalAccounts?`${propFirmStats.failRate.toFixed(1)}%`:"—","#f87171","% of accounts blown"],
+                          ["Payout Rate",propFirmStats.passed?`${propFirmStats.payoutRate.toFixed(1)}%`:"—",propFirmStats.payoutRate>=50?"#4ade80":"#fbbf24","% of passed accs with payout"],
+                        ].map(([l,v,c,sub])=>(
+                          <div key={l} className="card" style={{padding:18,textAlign:"center"}}>
+                            <div className="section-title" style={{marginBottom:8}}>{l}</div>
+                            <div className="mono" style={{fontSize:26,fontWeight:500,color:c,marginBottom:4}}>{v}</div>
+                            <div style={{fontSize:11,color:"#334155"}}>{sub}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* EV section */}
+                      <div className="card">
+                        <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Expected Value per Account Attempt</div>
+                        <div style={{fontSize:12,color:"#4a5568",marginBottom:20}}>Based on your historical pass/fail rates and average payout vs spend</div>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+                          {[
+                            ["Avg Spend / Attempt",fmt$(propFirmStats.avgSpend),"#f87171"],
+                            ["Avg Payout (on pass)",propFirmStats.passed?fmt$(propFirmStats.avgPayoutOnPass):"—","#4ade80"],
+                            ["Avg Spend (on fail)",propFirmStats.failed?fmt$(propFirmStats.avgSpendOnFail):"—","#f87171"],
+                          ].map(([l,v,c])=>(
+                            <div key={l} style={{background:"#090e14",border:"1px solid #141c26",borderRadius:8,padding:16,textAlign:"center"}}>
+                              <div className="section-title" style={{marginBottom:8}}>{l}</div>
+                              <div className="mono" style={{fontSize:20,fontWeight:500,color:c}}>{v}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{background:propFirmStats.evPerAttempt>=0?"rgba(74,222,128,0.05)":"rgba(248,113,113,0.05)",border:`1px solid ${propFirmStats.evPerAttempt>=0?"rgba(74,222,128,0.2)":"rgba(248,113,113,0.2)"}`,borderRadius:10,padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <div>
+                            <div style={{fontSize:13,fontWeight:600,color:propFirmStats.evPerAttempt>=0?"#4ade80":"#f87171",marginBottom:4}}>Expected Value (EV) per Attempt</div>
+                            <div style={{fontSize:12,color:"#4a5568",maxWidth:460,lineHeight:1.6}}>
+                              EV = P(pass) × avg net on pass + P(fail) × avg net on fail<br/>
+                              <span className="mono" style={{fontSize:11,color:"#334155"}}>
+                                = {(propFirmStats.passRate/100).toFixed(2)} × {fmt$(propFirmStats.avgPayoutOnPass - (propFirmStats.avgSpend))} + {(propFirmStats.failRate/100).toFixed(2)} × ({fmt$(-propFirmStats.avgSpendOnFail)})
+                              </span>
+                            </div>
+                          </div>
+                          <div className="mono" style={{fontSize:36,fontWeight:500,color:propFirmStats.evPerAttempt>=0?"#4ade80":"#f87171",minWidth:130,textAlign:"right"}}>{fmt$(propFirmStats.evPerAttempt)}</div>
+                        </div>
+                        {propFirmStats.pUnresolved>0.05&&<div style={{marginTop:10,fontSize:12,color:"#fbbf24",background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.15)",borderRadius:7,padding:"10px 14px"}}>⚠ {(propFirmStats.pUnresolved*100).toFixed(0)}% of accounts have no pass/fail outcome tagged yet — EV may be understated. Edit transactions in the Financials tab to add outcomes.</div>}
+                      </div>
+
+                      {/* Total financials */}
+                      <div className="card">
+                        <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:16}}>Real Money Summary</div>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+                          {[["Total Fees Paid",fmt$(propFirmStats.totalSpent),"#f87171"],["Total Withdrawn",fmt$(propFirmStats.totalPayouts),"#4ade80"],["Net Real P&L",fmt$(propFirmStats.net),propFirmStats.net>=0?"#4ade80":"#f87171"]].map(([l,v,c])=>(
+                            <div key={l} style={{background:"#090e14",border:"1px solid #141c26",borderRadius:8,padding:20,textAlign:"center"}}>
+                              <div className="section-title" style={{marginBottom:10}}>{l}</div>
+                              <div className="mono" style={{fontSize:24,fontWeight:500,color:c}}>{v}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Per-account breakdown */}
+                      {propFirmStats.accsWithTxs.length>0&&(
+                        <div className="card">
+                          <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Account-by-Account Breakdown</div>
+                          <div style={{fontSize:12,color:"#4a5568",marginBottom:16}}>Outcomes tagged per account</div>
+                          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                            {propFirmStats.accsWithTxs.map((a,i)=>{
+                              const net = a.totalPayout - a.totalSpent;
+                              const statusColor = a.payoutReceived?"#a78bfa":a.passed?"#4ade80":a.failed?"#f87171":"#fbbf24";
+                              const statusLabel = a.payoutReceived?"💰 Payout":a.passed?"✓ Passed":a.failed?"✗ Failed":"⏳ Pending";
+                              return(
+                                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 120px 110px 110px 110px 120px",gap:10,alignItems:"center",padding:"12px 16px",background:"#090e14",border:"1px solid #141c26",borderRadius:8}}>
+                                  <div>
+                                    <div style={{fontSize:13,color:"#e2e8f0",fontWeight:500}}>{a.account.name}</div>
+                                    <div style={{fontSize:11,color:"#4a5568"}}>{a.account.firm||"—"} · {a.account.phase}</div>
+                                  </div>
+                                  <div style={{fontSize:11,fontWeight:600,color:statusColor,background:`${statusColor}15`,border:`1px solid ${statusColor}30`,borderRadius:5,padding:"3px 9px",textAlign:"center"}}>{statusLabel}</div>
+                                  <div style={{textAlign:"right"}}><div style={{fontSize:10,color:"#334155",marginBottom:2}}>Spent</div><div className="mono" style={{fontSize:13,color:"#f87171"}}>{fmt$(a.totalSpent)}</div></div>
+                                  <div style={{textAlign:"right"}}><div style={{fontSize:10,color:"#334155",marginBottom:2}}>Withdrawn</div><div className="mono" style={{fontSize:13,color:"#4ade80"}}>{a.totalPayout?fmt$(a.totalPayout):"—"}</div></div>
+                                  <div style={{textAlign:"right"}}><div style={{fontSize:10,color:"#334155",marginBottom:2}}>Net</div><div className="mono" style={{fontSize:13,color:net>=0?"#4ade80":"#f87171"}}>{fmt$(net)}</div></div>
+                                  <div style={{textAlign:"right"}}><div style={{fontSize:10,color:"#334155",marginBottom:2}}>Trades</div><div className="mono" style={{fontSize:13,color:"#64748b"}}>{a.txs.length} tx</div></div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* By firm */}
+                      {propFirmStats.firmMap.length>0&&(
+                        <div className="card">
+                          <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Performance by Prop Firm</div>
+                          <div style={{fontSize:12,color:"#4a5568",marginBottom:16}}>Pass rate and net P&L per firm</div>
+                          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                            {propFirmStats.firmMap.sort((a,b)=>(b.payout-b.spent)-(a.payout-a.spent)).map(f=>{
+                              const passR = f.count?(f.passed/f.count)*100:0;
+                              const net = f.payout-f.spent;
+                              return(
+                                <div key={f.firm} style={{padding:"14px 18px",background:"#090e14",border:"1px solid #141c26",borderRadius:8}}>
+                                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                                    <div>
+                                      <div style={{fontSize:14,color:"#e2e8f0",fontWeight:500,marginBottom:3}}>{f.firm}</div>
+                                      <div style={{fontSize:12,color:"#4a5568"}}>{f.count} account{f.count!==1?"s":""} · {f.passed} passed · {f.failed} failed · {f.payouts} payout{f.payouts!==1?"s":""}</div>
+                                    </div>
+                                    <div style={{textAlign:"right"}}>
+                                      <div className="mono" style={{fontSize:16,fontWeight:500,color:net>=0?"#4ade80":"#f87171"}}>{fmt$(net)}</div>
+                                      <div style={{fontSize:11,color:passR>=50?"#4ade80":"#f87171"}}>{passR.toFixed(0)}% pass rate</div>
+                                    </div>
+                                  </div>
+                                  <div className="bar-bg" style={{height:4}}><div style={{width:`${passR}%`,height:"100%",background:passR>=50?"#4ade80":"#f87171",borderRadius:3}}/></div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {!propFirmStats.totalAccounts&&<div style={{textAlign:"center",padding:"60px 0",color:"#334155",fontSize:13}}>No account-linked transactions yet — go to Financials and log transactions with accounts, then set pass/fail outcomes.</div>}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1228,6 +1406,10 @@ export default function App() {
                 <div><label style={lbl}>Date</label><input type="date" value={newTransaction.date} onChange={e=>setNewTransaction(t=>({...t,date:e.target.value}))} style={inp}/></div>
                 <div><label style={lbl}>Account (optional)</label><Select value={newTransaction.accountId||""} onChange={e=>setNewTransaction(t=>({...t,accountId:e.target.value}))} options={[{value:"",label:"No account"},...accounts.map(a=>({value:a.id,label:a.name}))]}/></div>
               </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                <div><label style={lbl}>Account Outcome <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>optional</span></label><Select value={newTransaction.accountStatus||""} onChange={e=>setNewTransaction(t=>({...t,accountStatus:e.target.value}))} options={[{value:"",label:"— No outcome —"},{value:"passed",label:"✓ Passed / Funded"},{value:"failed",label:"✗ Failed / Blown"},{value:"payout_received",label:"💰 Payout Received"}]}/></div>
+                <div style={{display:"flex",alignItems:"flex-end"}}><div style={{flex:1,fontSize:11,color:"#334155",lineHeight:1.6,paddingBottom:4}}>Tag this entry with the outcome of the account challenge — used in Prop Firm Stats analytics.</div></div>
+              </div>
               <div style={{display:"flex",gap:8}}>
                 <input value={newTransaction.notes} onChange={e=>setNewTransaction(t=>({...t,notes:e.target.value}))} style={{...inp,flex:1}} placeholder='e.g. "FTMO 50K challenge fee", "First payout from Apex"...'/>
                 <button className="btn btn-primary" onClick={()=>{if(!newTransaction.amount)return;setTransactions(prev=>[...prev,{...newTransaction,id:Date.now()}]);setNewTransaction(EMPTY_TRANSACTION);showToast("Transaction logged");}}>Add</button>
@@ -1241,16 +1423,45 @@ export default function App() {
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
                   {[...transactions].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(tx=>{
                     const linkedAcc=tx.accountId?accounts.find(a=>a.id===tx.accountId):null;
+                    const isEditing = editingTransaction?.id === tx.id;
+                    const statusColors = { passed:"#4ade80", failed:"#f87171", payout_received:"#a78bfa" };
+                    const statusLabels = { passed:"✓ Passed", failed:"✗ Failed", payout_received:"💰 Payout" };
+                    if(isEditing) {
+                      return (
+                        <div key={tx.id} style={{padding:"16px",background:"#090e14",border:"1px solid #3b82f6",borderRadius:8,display:"flex",flexDirection:"column",gap:10}}>
+                          <div style={{fontSize:12,fontWeight:600,color:"#3b82f6",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:2}}>Edit Transaction</div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                            <div><label style={lbl}>Type</label><Select value={editingTransaction.type} onChange={e=>setEditingTransaction(t=>({...t,type:e.target.value}))} options={[{value:"expense",label:"Expense / Fee"},{value:"payout",label:"Payout"}]}/></div>
+                            <div><label style={lbl}>Amount ($)</label><input type="number" value={editingTransaction.amount} onChange={e=>setEditingTransaction(t=>({...t,amount:e.target.value}))} style={inp}/></div>
+                            <div><label style={lbl}>Date</label><input type="date" value={editingTransaction.date} onChange={e=>setEditingTransaction(t=>({...t,date:e.target.value}))} style={inp}/></div>
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                            <div><label style={lbl}>Linked Account</label><Select value={editingTransaction.accountId||""} onChange={e=>setEditingTransaction(t=>({...t,accountId:e.target.value}))} options={[{value:"",label:"No account"},...accounts.map(a=>({value:a.id,label:a.name}))]}/></div>
+                            <div>
+                              <label style={lbl}>Account Outcome</label>
+                              <Select value={editingTransaction.accountStatus||""} onChange={e=>setEditingTransaction(t=>({...t,accountStatus:e.target.value}))} options={[{value:"",label:"— No outcome set —"},{value:"passed",label:"✓ Passed / Funded"},{value:"failed",label:"✗ Failed / Blown"},{value:"payout_received",label:"💰 Payout Received"}]}/>
+                            </div>
+                          </div>
+                          <div><label style={lbl}>Notes</label><input value={editingTransaction.notes} onChange={e=>setEditingTransaction(t=>({...t,notes:e.target.value}))} style={inp}/></div>
+                          <div style={{display:"flex",gap:8}}>
+                            <button className="btn btn-primary btn-sm" onClick={()=>{setTransactions(prev=>prev.map(t=>t.id===editingTransaction.id?{...editingTransaction}:t));setEditingTransaction(null);showToast("Transaction updated");}}>Save</button>
+                            <button className="btn btn-ghost btn-sm" onClick={()=>setEditingTransaction(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      );
+                    }
                     return(
                       <div key={tx.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"#090e14",border:`1px solid ${tx.type==="expense"?"rgba(248,113,113,0.12)":"rgba(74,222,128,0.12)"}`,borderRadius:8}}>
-                        <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                        <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
                           <span className="badge" style={{background:tx.type==="expense"?"rgba(248,113,113,0.1)":"rgba(74,222,128,0.1)",color:tx.type==="expense"?"#f87171":"#4ade80",border:`1px solid ${tx.type==="expense"?"rgba(248,113,113,0.2)":"rgba(74,222,128,0.2)"}`}}>{tx.type==="expense"?"Expense":"Payout"}</span>
                           <span className="mono" style={{fontSize:12,color:"#64748b"}}>{tx.date}</span>
                           {linkedAcc&&<span style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.15)",padding:"2px 8px",borderRadius:5}}>{linkedAcc.name}</span>}
+                          {tx.accountStatus&&<span style={{fontSize:11,fontWeight:600,color:statusColors[tx.accountStatus],background:`${statusColors[tx.accountStatus]}15`,border:`1px solid ${statusColors[tx.accountStatus]}30`,padding:"2px 8px",borderRadius:5}}>{statusLabels[tx.accountStatus]}</span>}
                           {tx.notes&&<span style={{fontSize:12,color:"#4a5568",fontStyle:"italic"}}>{tx.notes}</span>}
                         </div>
-                        <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
                           <span className="mono" style={{fontSize:15,fontWeight:500,color:tx.type==="expense"?"#f87171":"#4ade80"}}>{tx.type==="expense"?"-":"+"}${parseFloat(tx.amount).toFixed(2)}</span>
+                          <button onClick={()=>setEditingTransaction({...tx})} className="btn btn-ghost btn-sm">Edit</button>
                           <button onClick={()=>setTransactions(prev=>prev.filter(t=>t.id!==tx.id))} className="btn btn-danger btn-sm">Del</button>
                         </div>
                       </div>
