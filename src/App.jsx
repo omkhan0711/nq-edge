@@ -277,7 +277,8 @@ export default function App() {
     const totalWinPnl=wins.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0);
     const totalLossPnl=Math.abs(losses.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0));
     const profitFactor=totalLossPnl?totalWinPnl/totalLossPnl:wins.length?999:0;
-    const avgRR=tradeList.filter(t=>t.rr).reduce((s,t)=>s+(parseFloat(t.rr)||0),0)/(tradeList.filter(t=>t.rr).length||1);
+    const winningWithRR=wins.filter(t=>t.rr);
+    const avgRR=winningWithRR.reduce((s,t)=>s+(parseFloat(t.rr)||0),0)/(winningWithRR.length||1);
     const sorted=[...tradeList].sort((a,b)=>new Date(a.date)-new Date(b.date));
     let cum=0,peak=0,maxDD=0;
     const equity=sorted.map(t=>{cum+=parseFloat(t.pnl)||0;if(cum>peak)peak=cum;const dd=peak-cum;if(dd>maxDD)maxDD=dd;return{date:t.date,value:cum};});
