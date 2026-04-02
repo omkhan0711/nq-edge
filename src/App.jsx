@@ -19,7 +19,7 @@ const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday
 
 const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
 const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false, balanceAdjustment:"0" };
-const EMPTY_TRANSACTION = { id:"", type:"challenge_fee", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"", accountStatus:"" };
+const EMPTY_TRANSACTION = { id:"", type:"challenge_fee", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"", accountStatus:"", firm:"" };
 const TX_TYPES = [
   { value:"challenge_fee", label:"Challenge Fee" },
   { value:"activation_fee", label:"Activation Fee" },
@@ -439,16 +439,40 @@ export default function App() {
     const totalSpent = transactions.filter(isExpenseTx).reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
     const totalPayouts = transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
     // By firm
+    // Build firmMap from all transactions (not just account-linked ones)
     const firmMap = {};
+    const addToFirmMap = (firmName, tx, acc) => {
+      const firm = firmName||"Unknown";
+      if(!firmMap[firm]) firmMap[firm]={firm,count:0,passed:0,failed:0,payouts:0,spent:0,payout:0,standaloneCount:0};
+      const amt = parseFloat(tx.amount)||0;
+      if(isExpenseTx(tx)) firmMap[firm].spent += amt;
+      if(tx.type==="payout") firmMap[firm].payout += amt;
+      if(tx.accountStatus==="passed"||tx.accountStatus==="payout_received") firmMap[firm].passed++;
+      if(tx.accountStatus==="failed") firmMap[firm].failed++;
+      if(tx.accountStatus==="payout_received") firmMap[firm].payouts++;
+    };
+    // Account-linked transactions
     accsWithTxs.forEach(a=>{
       const firm = a.account.firm||"Unknown";
-      if(!firmMap[firm]) firmMap[firm]={firm,count:0,passed:0,failed:0,payouts:0,spent:0,payout:0};
+      if(!firmMap[firm]) firmMap[firm]={firm,count:0,passed:0,failed:0,payouts:0,spent:0,payout:0,standaloneCount:0};
       firmMap[firm].count++;
       firmMap[firm].spent += a.totalSpent;
       firmMap[firm].payout += a.totalPayout;
       if(a.passed) firmMap[firm].passed++;
       if(a.failed && !a.passed) firmMap[firm].failed++;
       if(a.payoutReceived) firmMap[firm].payouts++;
+    });
+    // Standalone transactions (no account linked) with a firm set
+    transactions.filter(tx=>!tx.accountId && tx.firm).forEach(tx=>{
+      const firm = tx.firm;
+      if(!firmMap[firm]) firmMap[firm]={firm,count:0,passed:0,failed:0,payouts:0,spent:0,payout:0,standaloneCount:0};
+      const amt = parseFloat(tx.amount)||0;
+      if(isExpenseTx(tx)) firmMap[firm].spent += amt;
+      if(tx.type==="payout") firmMap[firm].payout += amt;
+      if(tx.accountStatus==="passed"||tx.accountStatus==="payout_received") firmMap[firm].passed++;
+      if(tx.accountStatus==="failed") firmMap[firm].failed++;
+      if(tx.accountStatus==="payout_received") firmMap[firm].payouts++;
+      firmMap[firm].standaloneCount++;
     });
     return { totalAccounts,passed,failed,payoutReceived,passRate,failRate,payoutRate,avgSpend,avgPayoutOnPass,avgSpendOnFail,evPerAttempt,totalSpent,totalPayouts,net:totalPayouts-totalSpent,accsWithTxs,firmMap:Object.values(firmMap),pUnresolved };
   },[accounts,transactions]);
@@ -1408,11 +1432,16 @@ export default function App() {
             </div>
             <div className="card" style={{marginBottom:16,padding:24}}>
               <div style={{fontSize:14,fontWeight:600,color:"#e2e8f0",marginBottom:16}}>Log Transaction</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
                 <div><label style={lbl}>Type</label><Select value={newTransaction.type} onChange={e=>setNewTransaction(t=>({...t,type:e.target.value,accountStatus:e.target.value==="payout"?"":t.accountStatus}))} options={TX_TYPES}/></div>
                 <div><label style={lbl}>Amount ($)</label><input type="number" value={newTransaction.amount} onChange={e=>setNewTransaction(t=>({...t,amount:e.target.value}))} style={inp} placeholder="0.00"/></div>
                 <div><label style={lbl}>Date</label><input type="date" value={newTransaction.date} onChange={e=>setNewTransaction(t=>({...t,date:e.target.value}))} style={inp}/></div>
-                <div><label style={lbl}>Account (optional)</label><Select value={newTransaction.accountId||""} onChange={e=>setNewTransaction(t=>({...t,accountId:e.target.value}))} options={[{value:"",label:"No account"},...accounts.map(a=>({value:a.id,label:a.name}))]}/></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                <div><label style={lbl}>Prop Firm <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>auto-fills from account</span></label>
+                  <FirmInput value={newTransaction.firm||""} onChange={v=>setNewTransaction(t=>({...t,firm:v}))} firms={propFirms}/>
+                </div>
+                <div><label style={lbl}>Account <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>optional</span></label><Select value={newTransaction.accountId||""} onChange={e=>{const acc=accounts.find(a=>a.id===e.target.value);setNewTransaction(t=>({...t,accountId:e.target.value,firm:acc?.firm||t.firm}));}} options={[{value:"",label:"No account"},...accounts.map(a=>({value:a.id,label:a.name}))]}/></div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                 <div><label style={lbl}>Account Outcome <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>optional</span></label><Select value={newTransaction.accountStatus||""} onChange={e=>setNewTransaction(t=>({...t,accountStatus:e.target.value}))} options={[{value:"",label:"— No outcome —"},{value:"passed",label:"✓ Passed / Funded"},{value:"failed",label:"✗ Failed / Blown"},{value:"payout_received",label:"💰 Payout Received"}]}/></div>
@@ -1450,6 +1479,7 @@ export default function App() {
                               <Select value={editingTransaction.accountStatus||""} onChange={e=>setEditingTransaction(t=>({...t,accountStatus:e.target.value}))} options={[{value:"",label:"— No outcome set —"},{value:"passed",label:"✓ Passed / Funded"},{value:"failed",label:"✗ Failed / Blown"},{value:"payout_received",label:"💰 Payout Received"}]}/>
                             </div>
                           </div>
+                          <div><label style={lbl}>Prop Firm</label><FirmInput value={editingTransaction.firm||""} onChange={v=>setEditingTransaction(t=>({...t,firm:v}))} firms={propFirms}/></div>
                           <div><label style={lbl}>Notes</label><input value={editingTransaction.notes} onChange={e=>setEditingTransaction(t=>({...t,notes:e.target.value}))} style={inp}/></div>
                           <div style={{display:"flex",gap:8}}>
                             <button className="btn btn-primary btn-sm" onClick={()=>{setTransactions(prev=>prev.map(t=>t.id===editingTransaction.id?{...editingTransaction}:t));setEditingTransaction(null);showToast("Transaction updated");}}>Save</button>
@@ -1464,7 +1494,7 @@ export default function App() {
                           <span className="badge" style={{background:tx.type==="payout"?"rgba(74,222,128,0.1)":"rgba(248,113,113,0.1)",color:tx.type==="payout"?"#4ade80":"#f87171",border:`1px solid ${tx.type==="payout"?"rgba(74,222,128,0.2)":"rgba(248,113,113,0.2)"}`}}>{tx.type==="challenge_fee"?"Challenge Fee":tx.type==="activation_fee"?"Activation Fee":tx.type==="payout"?"Payout":"Expense"}</span>
                           <span className="mono" style={{fontSize:12,color:"#64748b"}}>{tx.date}</span>
                           {linkedAcc&&<span style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.15)",padding:"2px 8px",borderRadius:5}}>{linkedAcc.name}</span>}
-                          {linkedAcc&&linkedAcc.firm&&<span style={{fontSize:11,color:"#93c5fd",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",padding:"2px 8px",borderRadius:5}}>{linkedAcc.firm}</span>}
+                          {(tx.firm||(linkedAcc&&linkedAcc.firm))&&<span style={{fontSize:11,color:"#93c5fd",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",padding:"2px 8px",borderRadius:5}}>{tx.firm||linkedAcc.firm}</span>}
                           {tx.accountStatus&&<span style={{fontSize:11,fontWeight:600,color:statusColors[tx.accountStatus],background:`${statusColors[tx.accountStatus]}15`,border:`1px solid ${statusColors[tx.accountStatus]}30`,padding:"2px 8px",borderRadius:5}}>{statusLabels[tx.accountStatus]}</span>}
                           {tx.notes&&<span style={{fontSize:12,color:"#4a5568",fontStyle:"italic"}}>{tx.notes}</span>}
                         </div>
