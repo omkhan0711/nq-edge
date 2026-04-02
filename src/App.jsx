@@ -19,6 +19,7 @@ const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday
 
 const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
 const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false, balanceAdjustment:"0" };
+const EMPTY_ADJUSTMENT = { amount:"", reason:"", date:new Date().toISOString().split("T")[0] };
 const EMPTY_TRANSACTION = { id:"", type:"challenge_fee", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"", accountStatus:"", firm:"" };
 const TX_TYPES = [
   { value:"challenge_fee", label:"Challenge Fee" },
@@ -241,6 +242,10 @@ export default function App() {
   const [galleryFilter, setGalleryFilter] = useState({ outcome:"All", confluence:"All" });
   const [editingTransaction, setEditingTransaction] = useState(null); // holds tx being edited
   const [expandedScreenshot, setExpandedScreenshot] = useState(null);
+  const [balanceAdjustments, setBalanceAdjustments] = useStorage("nq_balance_adjustments_v1",[]);
+  const [adjustmentForm, setAdjustmentForm] = useState(EMPTY_ADJUSTMENT);
+  const [showAdjustmentForm, setShowAdjustmentForm] = useState(null); // accountId or null
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(null); // index or null
   const fileRef = useRef();
   const tvRef = useRef();
 
@@ -354,10 +359,11 @@ export default function App() {
     const totalExpenses=acctTx.filter(t=>isExpenseTx(t)).reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
     const totalPayouts=acctTx.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
     const netReal=totalPayouts-totalExpenses;
-    const balAdj=parseFloat(acc.balanceAdjustment)||0;
+    const accAdjs=balanceAdjustments.filter(a=>a.accountId===acc.id);
+    const balAdj=accAdjs.reduce((s,a)=>s+(parseFloat(a.amount)||0),0);
     const currentBalanceAdj=startBal+pnl+balAdj;
-    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj};
-  }),[accounts,trades,transactions,computeStats]);
+    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj,adjustments:accAdjs};
+  }),[accounts,trades,transactions,balanceAdjustments,computeStats]);
 
   const equityPath=useMemo(()=>{
     const src=selectedAccount?(accountStats.find(a=>a.id===selectedAccount)?.stats?.equity||[]):(stats?.equity||[]);
@@ -556,7 +562,13 @@ export default function App() {
   const openEdit=(idx)=>{setEditIdx(idx);setForm({...EMPTY,...trades[idx],accountIds:trades[idx].accountIds||[],confluences:trades[idx].confluences||[]});setScreenshotPreview(trades[idx].screenshot||null);setShowForm(true);};
   const deleteTrade=(idx)=>{setTrades(prev=>prev.filter((_,i)=>i!==idx));showToast("Trade deleted","warn");};
   const openEditAccount=(idx)=>{setEditAccountIdx(idx);setAccountForm(accounts[idx]);setShowAccountForm(true);};
-  const deleteAccount=(idx)=>{setAccounts(prev=>prev.filter((_,i)=>i!==idx));showToast("Account removed","warn");};
+  const deleteAccount=(idx)=>{setAccounts(prev=>prev.filter((_,i)=>i!==idx));setConfirmDeleteAccount(null);showToast("Account removed","warn");};
+  const submitAdjustment=(accountId)=>{
+    if(!adjustmentForm.amount){showToast("Enter an amount","error");return;}
+    setBalanceAdjustments(prev=>[...prev,{...adjustmentForm,id:Date.now(),accountId}]);
+    setAdjustmentForm(EMPTY_ADJUSTMENT);showToast("Adjustment submitted");
+  };
+  const deleteAdjustment=(adjId)=>{setBalanceAdjustments(prev=>prev.filter(a=>a.id!==adjId));showToast("Adjustment removed","warn");};
 
   const activeStats=selectedAccount?accountStats.find(a=>a.id===selectedAccount)?.stats:stats;
   const ratingColor=r=>({"A+":"#4ade80","A":"#4ade80","A-":"#86efac","B+":"#f0b429","B":"#f0b429","B-":"#fcd34d","C":"#f87171"}[r]||"#e2e8f0");
@@ -893,11 +905,47 @@ export default function App() {
                           ))}
                         </div>
                       </div>
+                      <div style={{background:"#090e14",border:"1px solid #141c26",borderRadius:7,padding:"10px 14px",marginBottom:14}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:a.adjustments?.length||showAdjustmentForm===a.id?8:0}}>
+                          <div className="section-title">Manual Adjustments {a.balAdj!==0&&<span style={{fontSize:10,color:a.balAdj>0?"#4ade80":"#f87171",marginLeft:6}}>({a.balAdj>0?"+":""}{fmt$(a.balAdj)})</span>}</div>
+                          <button onClick={()=>setShowAdjustmentForm(showAdjustmentForm===a.id?null:a.id)} className="btn btn-ghost" style={{fontSize:10,padding:"3px 8px"}}>{showAdjustmentForm===a.id?"Cancel":"+ Add"}</button>
+                        </div>
+                        {showAdjustmentForm===a.id&&(
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,marginBottom:8,alignItems:"end"}}>
+                            <div>
+                              <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Amount ($)</div>
+                              <input type="number" value={adjustmentForm.amount} onChange={e=>setAdjustmentForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",background:"#0b1118",border:"1px solid #1e2730",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="+500 or -200"/>
+                            </div>
+                            <div>
+                              <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Reason</div>
+                              <input value={adjustmentForm.reason} onChange={e=>setAdjustmentForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",background:"#0b1118",border:"1px solid #1e2730",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="e.g. Data correction"/>
+                            </div>
+                            <button onClick={()=>submitAdjustment(a.id)} className="btn btn-primary" style={{fontSize:11,padding:"7px 14px"}}>Submit</button>
+                          </div>
+                        )}
+                        {a.adjustments?.length>0&&(
+                          <div style={{maxHeight:150,overflowY:"auto"}}>
+                            {a.adjustments.sort((x,y)=>y.id-x.id).map(adj=>(
+                              <div key={adj.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #141c26",fontSize:11}}>
+                                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                                  <span className="mono" style={{color:parseFloat(adj.amount)>=0?"#4ade80":"#f87171",fontWeight:500}}>{parseFloat(adj.amount)>=0?"+":""}{fmt$(parseFloat(adj.amount))}</span>
+                                  <span style={{color:"#4a5568"}}>{adj.reason||"No reason"}</span>
+                                </div>
+                                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                                  <span style={{color:"#334155",fontSize:10}}>{adj.date}</span>
+                                  <button onClick={()=>deleteAdjustment(adj.id)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:12,padding:"0 2px"}}>✕</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {!a.adjustments?.length&&showAdjustmentForm!==a.id&&<div style={{fontSize:11,color:"#334155",textAlign:"center",padding:"4px 0"}}>No adjustments yet</div>}
+                      </div>
                       {a.notes&&<div style={{fontSize:12,color:"#4a5568",borderLeft:"2px solid #1e2730",paddingLeft:10,marginBottom:14,fontStyle:"italic",lineHeight:1.5}}>{a.notes}</div>}
                       <div style={{display:"flex",gap:6}}>
                         <button onClick={()=>openEditAccount(realIdx)} className="btn btn-ghost btn-sm">Edit</button>
                         <button onClick={()=>toggleDormant(realIdx)} className="btn btn-sm" style={{background:"transparent",color:a.dormant?"#4ade80":"#fbbf24",border:`1px solid ${a.dormant?"rgba(74,222,128,0.2)":"rgba(251,191,36,0.2)"}`,fontSize:11}}>{a.dormant?"Reactivate":"Set Dormant"}</button>
-                        <button onClick={()=>deleteAccount(realIdx)} className="btn btn-danger btn-sm">Remove</button>
+                        <button onClick={()=>setConfirmDeleteAccount(realIdx)} className="btn btn-danger btn-sm">Remove</button>
                       </div>
                     </div>
                   );
@@ -1575,12 +1623,26 @@ export default function App() {
               <div><label style={lbl}>Phase</label><Select value={accountForm.phase} onChange={e=>saf("phase",e.target.value)} options={["Phase 1","Phase 2","Funded","Verification"]}/></div>
               <div><label style={lbl}>Account Size ($)</label><input type="number" value={accountForm.size} onChange={e=>saf("size",e.target.value)} style={inp} placeholder="50000"/></div>
               <div><label style={lbl}>Starting Balance ($)</label><input type="number" value={accountForm.startingBalance} onChange={e=>saf("startingBalance",e.target.value)} style={inp} placeholder="50000"/></div>
-              <div style={{gridColumn:"1/-1"}}><label style={lbl}>Manual Balance Adjustment ($) <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>correct for data discrepancies — does not affect analytics</span></label><input type="number" value={accountForm.balanceAdjustment||"0"} onChange={e=>saf("balanceAdjustment",e.target.value)} style={inp} placeholder="0"/></div>
+              <div style={{gridColumn:"1/-1",background:"rgba(148,163,184,0.04)",border:"1px solid #1e2730",borderRadius:7,padding:"10px 14px"}}><div style={{fontSize:11,color:"#4a5568"}}>Manual balance adjustments are now managed from each account card — use the "+ Add" button in the Manual Adjustments section.</div></div>
               <div style={{gridColumn:"1/-1"}}><label style={lbl}>Notes</label><input value={accountForm.notes} onChange={e=>saf("notes",e.target.value)} style={inp} placeholder="Any notes..."/></div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:24}}>
               <button onClick={handleAccountSubmit} className="btn btn-primary" style={{flex:1,padding:11}}>{editAccountIdx!==null?"Update Account":"Add Account"}</button>
               <button onClick={()=>{setShowAccountForm(false);setEditAccountIdx(null);}} className="btn btn-ghost" style={{padding:"11px 22px"}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── CONFIRM DELETE ACCOUNT ─── */}
+      {confirmDeleteAccount!==null&&(
+        <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setConfirmDeleteAccount(null);}}>
+          <div className="modal" style={{maxWidth:400,textAlign:"center"}}>
+            <div style={{fontSize:18,fontWeight:600,color:"#e2e8f0",marginBottom:12}}>Remove Account</div>
+            <div style={{fontSize:13,color:"#94a3b8",marginBottom:24,lineHeight:1.6}}>Are you sure you want to remove this account?<br/><span style={{fontSize:11,color:"#4a5568"}}>This action cannot be undone.</span></div>
+            <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+              <button onClick={()=>deleteAccount(confirmDeleteAccount)} className="btn btn-danger" style={{padding:"10px 24px",fontSize:13}}>Yes, Remove</button>
+              <button onClick={()=>setConfirmDeleteAccount(null)} className="btn btn-ghost" style={{padding:"10px 24px",fontSize:13}}>Cancel</button>
             </div>
           </div>
         </div>
