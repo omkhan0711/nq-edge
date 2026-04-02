@@ -340,6 +340,7 @@ export default function App() {
     },0);
     return {...base,totalPnl:allAccountsPnl};
   },[trades,accounts,computeStats]);
+  const isExpenseTx = t => t.type==="expense"||t.type==="challenge_fee"||t.type==="activation_fee";
   const accountStats=useMemo(()=>accounts.map(acc=>{
     const accTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id)&&!t.excludeFromAnalytics);
     const s=computeStats(accTrades);
@@ -397,7 +398,6 @@ export default function App() {
   const availableMonths=useMemo(()=>{const months=new Set(trades.map(t=>t.date?.substring(0,7)).filter(Boolean));return["All",...[...months].sort().reverse()];},[trades]);
   const filteredTrades=useMemo(()=>trades.filter(t=>(filterOutcome==="All"||t.outcome===filterOutcome)&&(filterAccount==="All"||(t.accountIds||[]).includes(filterAccount))&&(filterConfluence==="All"||(t.confluences||[]).includes(filterConfluence))&&(filterMonth==="All"||t.date?.startsWith(filterMonth))).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,filterOutcome,filterAccount,filterConfluence,filterMonth]);
   const galleryTrades=useMemo(()=>trades.filter(t=>t.screenshot&&(galleryFilter.outcome==="All"||t.outcome===galleryFilter.outcome)&&(galleryFilter.confluence==="All"||(t.confluences||[]).includes(galleryFilter.confluence))).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,galleryFilter]);
-  const isExpenseTx = t => t.type==="expense"||t.type==="challenge_fee"||t.type==="activation_fee";
   const financialsSummary=useMemo(()=>({totalExpenses:transactions.filter(isExpenseTx).reduce((s,t)=>s+(parseFloat(t.amount)||0),0),totalPayouts:transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0),net:transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0)-transactions.filter(isExpenseTx).reduce((s,t)=>s+(parseFloat(t.amount)||0),0)}),[transactions]);
 
   // ─── PROP FIRM STATS ───
