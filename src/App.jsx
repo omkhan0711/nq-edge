@@ -17,9 +17,14 @@ for (let h=9;h<=10;h++) for (let m=0;m<60;m+=5) { if(h===10&&m>30)break; TIME_SL
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"A", notes:"", emotion:"Calm", followedPlan:true, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
-const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false };
-const EMPTY_TRANSACTION = { id:"", type:"expense", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"", accountStatus:"" };
+const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
+const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false, balanceAdjustment:"0" };
+const EMPTY_TRANSACTION = { id:"", type:"challenge_fee", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"", accountStatus:"" };
+const TX_TYPES = [
+  { value:"challenge_fee", label:"Challenge Fee" },
+  { value:"activation_fee", label:"Activation Fee" },
+  { value:"payout", label:"Payout / Withdrawal" },
+];
 // accountStatus: "" | "passed" | "failed" | "payout_received"
 
 function useStorage(key, fallback) {
@@ -345,10 +350,12 @@ export default function App() {
     const ddUsed=s?.maxDD||0;
     const ddPct=(ddUsed/startBal)*100;
     const acctTx=transactions.filter(t=>t.accountId===acc.id);
-    const totalExpenses=acctTx.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+    const totalExpenses=acctTx.filter(t=>isExpenseTx(t)).reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
     const totalPayouts=acctTx.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
     const netReal=totalPayouts-totalExpenses;
-    return{...acc,stats:s,pnl,currentBalance,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal};
+    const balAdj=parseFloat(acc.balanceAdjustment)||0;
+    const currentBalanceAdj=startBal+pnl+balAdj;
+    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj};
   }),[accounts,trades,transactions,computeStats]);
 
   const equityPath=useMemo(()=>{
@@ -390,7 +397,8 @@ export default function App() {
   const availableMonths=useMemo(()=>{const months=new Set(trades.map(t=>t.date?.substring(0,7)).filter(Boolean));return["All",...[...months].sort().reverse()];},[trades]);
   const filteredTrades=useMemo(()=>trades.filter(t=>(filterOutcome==="All"||t.outcome===filterOutcome)&&(filterAccount==="All"||(t.accountIds||[]).includes(filterAccount))&&(filterConfluence==="All"||(t.confluences||[]).includes(filterConfluence))&&(filterMonth==="All"||t.date?.startsWith(filterMonth))).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,filterOutcome,filterAccount,filterConfluence,filterMonth]);
   const galleryTrades=useMemo(()=>trades.filter(t=>t.screenshot&&(galleryFilter.outcome==="All"||t.outcome===galleryFilter.outcome)&&(galleryFilter.confluence==="All"||(t.confluences||[]).includes(galleryFilter.confluence))).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,galleryFilter]);
-  const financialsSummary=useMemo(()=>({totalExpenses:transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0),totalPayouts:transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0),net:transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0)-transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0)}),[transactions]);
+  const isExpenseTx = t => t.type==="expense"||t.type==="challenge_fee"||t.type==="activation_fee";
+  const financialsSummary=useMemo(()=>({totalExpenses:transactions.filter(isExpenseTx).reduce((s,t)=>s+(parseFloat(t.amount)||0),0),totalPayouts:transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0),net:transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0)-transactions.filter(isExpenseTx).reduce((s,t)=>s+(parseFloat(t.amount)||0),0)}),[transactions]);
 
   // ─── PROP FIRM STATS ───
   const propFirmStats = useMemo(()=>{
@@ -403,7 +411,7 @@ export default function App() {
       if(tx.accountId && accMap[tx.accountId]) {
         accMap[tx.accountId].txs.push(tx);
         const amt = parseFloat(tx.amount)||0;
-        if(tx.type==="expense") accMap[tx.accountId].totalSpent += amt;
+        if(isExpenseTx(tx)) accMap[tx.accountId].totalSpent += amt;
         if(tx.type==="payout") accMap[tx.accountId].totalPayout += amt;
         if(tx.accountStatus==="passed") accMap[tx.accountId].passed = true;
         if(tx.accountStatus==="failed") accMap[tx.accountId].failed = true;
@@ -428,7 +436,7 @@ export default function App() {
     // EV per account attempt = P(pass)*avgNetOnPass + P(fail)*avgNetOnFail
     const pPass = passRate/100; const pFail = failRate/100; const pUnresolved = 1 - pPass - pFail;
     const evPerAttempt = (pPass * (avgPayoutOnPass - avgSpendOnPass)) + (pFail * (-avgSpendOnFail));
-    const totalSpent = transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+    const totalSpent = transactions.filter(isExpenseTx).reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
     const totalPayouts = transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
     // By firm
     const firmMap = {};
@@ -752,7 +760,7 @@ export default function App() {
                   </div>
 
                   {(()=>{
-                    const mt=Object.entries(calDayMap).filter(([date])=>{const d=new Date(date);return d.getFullYear()===calMonth.y&&d.getMonth()===calMonth.m;});
+                    const mt=Object.entries(calDayMap).filter(([date])=>{ const [y,m]=date.split("-").map(Number); return y===calMonth.y&&m-1===calMonth.m; });
                     const mPnl=mt.reduce((s,[,d])=>s+d.pnl,0);
                     const mTrades=mt.reduce((s,[,d])=>s+d.count,0);
                     const mWins=mt.reduce((s,[,d])=>s+d.wins,0);
@@ -839,7 +847,7 @@ export default function App() {
                         <div style={{textAlign:"right"}}>
                           <div className="mono" style={{fontSize:18,fontWeight:500,color:a.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(a.pnl)}</div>
                           <div style={{fontSize:11,color:a.gainPct>=0?"#4ade80":"#f87171"}}>{a.gainPct>=0?"+":""}{a.gainPct.toFixed(2)}%</div>
-                          <div style={{fontSize:11,color:"#334155"}}>Bal: <span className="mono" style={{color:"#94a3b8"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span></div>
+                          <div style={{fontSize:11,color:"#334155"}}>Bal: <span className="mono" style={{color:"#94a3b8"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span>{a.balAdj!==0&&<span style={{fontSize:10,color:a.balAdj>0?"#4ade80":"#f87171",marginLeft:4}}>({a.balAdj>0?"+":""}{fmt$(a.balAdj)} adj)</span>}</div>
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
@@ -1401,7 +1409,7 @@ export default function App() {
             <div className="card" style={{marginBottom:16,padding:24}}>
               <div style={{fontSize:14,fontWeight:600,color:"#e2e8f0",marginBottom:16}}>Log Transaction</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
-                <div><label style={lbl}>Type</label><Select value={newTransaction.type} onChange={e=>setNewTransaction(t=>({...t,type:e.target.value}))} options={[{value:"expense",label:"Expense / Fee"},{value:"payout",label:"Payout / Withdrawal"}]}/></div>
+                <div><label style={lbl}>Type</label><Select value={newTransaction.type} onChange={e=>setNewTransaction(t=>({...t,type:e.target.value,accountStatus:e.target.value==="payout"?"":t.accountStatus}))} options={TX_TYPES}/></div>
                 <div><label style={lbl}>Amount ($)</label><input type="number" value={newTransaction.amount} onChange={e=>setNewTransaction(t=>({...t,amount:e.target.value}))} style={inp} placeholder="0.00"/></div>
                 <div><label style={lbl}>Date</label><input type="date" value={newTransaction.date} onChange={e=>setNewTransaction(t=>({...t,date:e.target.value}))} style={inp}/></div>
                 <div><label style={lbl}>Account (optional)</label><Select value={newTransaction.accountId||""} onChange={e=>setNewTransaction(t=>({...t,accountId:e.target.value}))} options={[{value:"",label:"No account"},...accounts.map(a=>({value:a.id,label:a.name}))]}/></div>
@@ -1431,7 +1439,7 @@ export default function App() {
                         <div key={tx.id} style={{padding:"16px",background:"#090e14",border:"1px solid #3b82f6",borderRadius:8,display:"flex",flexDirection:"column",gap:10}}>
                           <div style={{fontSize:12,fontWeight:600,color:"#3b82f6",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:2}}>Edit Transaction</div>
                           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-                            <div><label style={lbl}>Type</label><Select value={editingTransaction.type} onChange={e=>setEditingTransaction(t=>({...t,type:e.target.value}))} options={[{value:"expense",label:"Expense / Fee"},{value:"payout",label:"Payout"}]}/></div>
+                            <div><label style={lbl}>Type</label><Select value={editingTransaction.type} onChange={e=>setEditingTransaction(t=>({...t,type:e.target.value}))} options={TX_TYPES}/></div>
                             <div><label style={lbl}>Amount ($)</label><input type="number" value={editingTransaction.amount} onChange={e=>setEditingTransaction(t=>({...t,amount:e.target.value}))} style={inp}/></div>
                             <div><label style={lbl}>Date</label><input type="date" value={editingTransaction.date} onChange={e=>setEditingTransaction(t=>({...t,date:e.target.value}))} style={inp}/></div>
                           </div>
@@ -1451,16 +1459,17 @@ export default function App() {
                       );
                     }
                     return(
-                      <div key={tx.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"#090e14",border:`1px solid ${tx.type==="expense"?"rgba(248,113,113,0.12)":"rgba(74,222,128,0.12)"}`,borderRadius:8}}>
+                      <div key={tx.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"#090e14",border:`1px solid ${tx.type==="payout"?"rgba(74,222,128,0.12)":"rgba(248,113,113,0.12)"}`,borderRadius:8}}>
                         <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-                          <span className="badge" style={{background:tx.type==="expense"?"rgba(248,113,113,0.1)":"rgba(74,222,128,0.1)",color:tx.type==="expense"?"#f87171":"#4ade80",border:`1px solid ${tx.type==="expense"?"rgba(248,113,113,0.2)":"rgba(74,222,128,0.2)"}`}}>{tx.type==="expense"?"Expense":"Payout"}</span>
+                          <span className="badge" style={{background:tx.type==="payout"?"rgba(74,222,128,0.1)":"rgba(248,113,113,0.1)",color:tx.type==="payout"?"#4ade80":"#f87171",border:`1px solid ${tx.type==="payout"?"rgba(74,222,128,0.2)":"rgba(248,113,113,0.2)"}`}}>{tx.type==="challenge_fee"?"Challenge Fee":tx.type==="activation_fee"?"Activation Fee":tx.type==="payout"?"Payout":"Expense"}</span>
                           <span className="mono" style={{fontSize:12,color:"#64748b"}}>{tx.date}</span>
                           {linkedAcc&&<span style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.15)",padding:"2px 8px",borderRadius:5}}>{linkedAcc.name}</span>}
+                          {linkedAcc&&linkedAcc.firm&&<span style={{fontSize:11,color:"#93c5fd",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",padding:"2px 8px",borderRadius:5}}>{linkedAcc.firm}</span>}
                           {tx.accountStatus&&<span style={{fontSize:11,fontWeight:600,color:statusColors[tx.accountStatus],background:`${statusColors[tx.accountStatus]}15`,border:`1px solid ${statusColors[tx.accountStatus]}30`,padding:"2px 8px",borderRadius:5}}>{statusLabels[tx.accountStatus]}</span>}
                           {tx.notes&&<span style={{fontSize:12,color:"#4a5568",fontStyle:"italic"}}>{tx.notes}</span>}
                         </div>
                         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                          <span className="mono" style={{fontSize:15,fontWeight:500,color:tx.type==="expense"?"#f87171":"#4ade80"}}>{tx.type==="expense"?"-":"+"}${parseFloat(tx.amount).toFixed(2)}</span>
+                          <span className="mono" style={{fontSize:15,fontWeight:500,color:tx.type==="payout"?"#4ade80":"#f87171"}}>{tx.type==="payout"?"+":"-"}${parseFloat(tx.amount).toFixed(2)}</span>
                           <button onClick={()=>setEditingTransaction({...tx})} className="btn btn-ghost btn-sm">Edit</button>
                           <button onClick={()=>setTransactions(prev=>prev.filter(t=>t.id!==tx.id))} className="btn btn-danger btn-sm">Del</button>
                         </div>
@@ -1536,6 +1545,7 @@ export default function App() {
               <div><label style={lbl}>Phase</label><Select value={accountForm.phase} onChange={e=>saf("phase",e.target.value)} options={["Phase 1","Phase 2","Funded","Verification"]}/></div>
               <div><label style={lbl}>Account Size ($)</label><input type="number" value={accountForm.size} onChange={e=>saf("size",e.target.value)} style={inp} placeholder="50000"/></div>
               <div><label style={lbl}>Starting Balance ($)</label><input type="number" value={accountForm.startingBalance} onChange={e=>saf("startingBalance",e.target.value)} style={inp} placeholder="50000"/></div>
+              <div style={{gridColumn:"1/-1"}}><label style={lbl}>Manual Balance Adjustment ($) <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>correct for data discrepancies — does not affect analytics</span></label><input type="number" value={accountForm.balanceAdjustment||"0"} onChange={e=>saf("balanceAdjustment",e.target.value)} style={inp} placeholder="0"/></div>
               <div style={{gridColumn:"1/-1"}}><label style={lbl}>Notes</label><input value={accountForm.notes} onChange={e=>saf("notes",e.target.value)} style={inp} placeholder="Any notes..."/></div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:24}}>
@@ -1583,7 +1593,7 @@ export default function App() {
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div><label style={lbl}>Asset</label><Select value={form.asset||"MNQ"} onChange={e=>sf("asset",e.target.value)} options={ASSETS}/></div>
-              <div><label style={lbl}>Trade Rating</label><Select value={form.rating||"A"} onChange={e=>sf("rating",e.target.value)} options={TRADE_RATINGS}/></div>
+              <div><label style={lbl}>Trade Rating</label><Select value={form.rating||""} onChange={e=>sf("rating",e.target.value)} options={[{value:"",label:"— Unrated —"},...TRADE_RATINGS]}/></div>
               {[["Date","date","date"],["Entry Time","time","time"],["Exit Time","exitTime","time"],["Entry Price","entry","number"],["Exit Price","exit","number"],["Stop Loss","stopLoss","number"],["Take Profit","takeProfit","number"],["Contracts","contracts","number"]].map(([l,k,t])=>(
                 <div key={k}><label style={lbl}>{l}</label><input type={t} value={form[k]} onChange={e=>sf(k,e.target.value)} style={inp}/></div>
               ))}
