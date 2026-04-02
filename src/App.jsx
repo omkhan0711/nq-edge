@@ -10,7 +10,7 @@ const RR_BUCKETS = ["0.5R","1R","1.5R","2R","2.5R","3R","3.5R","4R","4.5R","5R+"
 const CONTRACT_MULTIPLIERS = { MNQ:2, NQ:20, MES:5, ES:50 };
 const COMMISSIONS = { MNQ:0.52, NQ:1.55, MES:0.52, ES:1.55 };
 const DEFAULT_CONFLUENCES = ["IFVG","SMT","Liquidity Sweep","5-minute FVG Delivery","15-minute FVG Delivery","1-hour FVG Delivery","4-hour FVG Delivery","Order Block","Judas Swing","Premium/Discount","Macro"];
-const DEFAULT_FIRMS = ["FTMO","Funded Trading Plus","The Funded Trader","MyForexFunds","E8 Funding","True Forex Funds","Apex Trader Funding","TopStep","Tradovate"];
+const DEFAULT_FIRMS = ["Funded Trading Plus","Apex Trader Funding","TopStep"];
 const BE_TOLERANCE = 0.20;
 const TIME_SLOTS = [];
 for (let h=9;h<=10;h++) for (let m=0;m<60;m+=5) { if(h===10&&m>30)break; TIME_SLOTS.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`); }
