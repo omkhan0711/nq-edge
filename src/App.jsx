@@ -367,8 +367,9 @@ export default function App() {
     const accAdjs=balanceAdjustments.filter(a=>a.accountId===acc.id);
     const balAdj=accAdjs.reduce((s,a)=>s+(parseFloat(a.amount)||0),0);
     const currentBalanceAdj=startBal+pnl+balAdj-totalPayouts;
-    const balPct=(currentBalanceAdj/startBal)*100;
-    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj,adjustments:accAdjs,balPct};
+    const totalProfit=pnl+balAdj;
+    const totalProfitPct=(totalProfit/startBal)*100;
+    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj,adjustments:accAdjs,totalProfit,totalProfitPct};
   }),[accounts,trades,transactions,balanceAdjustments,computeStats]);
 
   const equityPath=useMemo(()=>{
@@ -889,11 +890,6 @@ export default function App() {
                         </div>
                         <div style={{textAlign:"right"}}>
                           <div className="mono" style={{fontSize:20,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
-                          <div style={{fontSize:11,color:a.pnl>=0?"#4ade80":"#f87171",marginTop:2}}>{a.pnl>=0?"+":""}{fmt$(a.pnl)} profit</div>
-                          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:2}}>
-                            <span style={{fontSize:10,color:a.gainPct>=0?"#4ade80":"#f87171"}}>{a.gainPct>=0?"+":""}{a.gainPct.toFixed(2)}% gain</span>
-                            <span style={{fontSize:10,color:a.balPct>=100?"#4ade80":"#f87171"}}>{a.balPct.toFixed(1)}% bal</span>
-                          </div>
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
@@ -903,6 +899,13 @@ export default function App() {
                             <div className="mono" style={{fontSize:14,fontWeight:500,color:c}}>{v}</div>
                           </div>
                         ))}
+                      </div>
+                      <div style={{background:"#090e14",border:`1px solid ${a.totalProfit>=0?"rgba(74,222,128,0.15)":"rgba(248,113,113,0.15)"}`,borderRadius:7,padding:"12px 14px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <div>
+                          <div className="section-title" style={{marginBottom:2}}>Total Overall Profit</div>
+                          <div style={{fontSize:10,color:a.totalProfitPct>=0?"#4ade80":"#f87171"}}>{a.totalProfitPct>=0?"+":""}{a.totalProfitPct.toFixed(2)}%</div>
+                        </div>
+                        <div className="mono" style={{fontSize:18,fontWeight:600,color:a.totalProfit>=0?"#4ade80":"#f87171"}}>{a.totalProfit>=0?"+":""}{fmt$(a.totalProfit)}</div>
                       </div>
                       <div style={{background:"#090e14",border:"1px solid #141c26",borderRadius:7,padding:"10px 14px",marginBottom:14}}>
                         <div className="section-title" style={{marginBottom:8}}>Financials</div>
