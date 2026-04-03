@@ -63,10 +63,10 @@ function fmtDuration(mins) {
 }
 
 const SEL_STYLE = {
-  width:"100%", background:"#0c1117", border:"1px solid #1e2730",
-  borderRadius:6, padding:"9px 12px", color:"#e2e8f0", fontSize:13,
+  width:"100%", background:"rgba(15,23,35,0.5)", border:"1px solid rgba(148,163,184,0.08)",
+  borderRadius:10, padding:"10px 14px", color:"#e2e8f0", fontSize:13,
   fontFamily:"'DM Sans',sans-serif", cursor:"pointer",
-  appearance:"none", WebkitAppearance:"none", outline:"none"
+  appearance:"none", WebkitAppearance:"none", outline:"none", transition:"all 0.2s ease"
 };
 
 function Select({ value, onChange, options, style }) {
@@ -74,8 +74,8 @@ function Select({ value, onChange, options, style }) {
     <div style={{ position:"relative" }}>
       <select value={value} onChange={onChange} style={{ ...SEL_STYLE, ...style }}>
         {options.map(o => typeof o==="string"
-          ? <option key={o} value={o} style={{ background:"#0c1117", color:"#e2e8f0" }}>{o}</option>
-          : <option key={o.value} value={o.value} style={{ background:"#0c1117", color:"#e2e8f0" }}>{o.label}</option>)}
+          ? <option key={o} value={o} style={{ background:"#0a1018", color:"#e2e8f0" }}>{o}</option>
+          : <option key={o.value} value={o.value} style={{ background:"#0a1018", color:"#e2e8f0" }}>{o.label}</option>)}
       </select>
       <div style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color:"#4a5568", fontSize:10 }}>▾</div>
     </div>
@@ -96,14 +96,14 @@ function FirmInput({ value, onChange, firms }) {
   return (
     <div ref={ref} style={{ position:"relative" }}>
       <input value={input} onChange={e=>{ setInput(e.target.value); onChange(e.target.value); setOpen(true); }} onFocus={()=>setOpen(true)}
-        style={{ width:"100%", background:"#0c1117", border:"1px solid #1e2730", borderRadius:6, padding:"9px 12px", color:"#e2e8f0", fontSize:13, fontFamily:"'DM Sans',sans-serif", outline:"none", boxSizing:"border-box" }}
+        style={{ width:"100%", background:"rgba(15,23,35,0.5)", border:"1px solid rgba(148,163,184,0.08)", borderRadius:10, padding:"10px 14px", color:"#e2e8f0", fontSize:13, fontFamily:"'DM Sans',sans-serif", outline:"none", boxSizing:"border-box", transition:"all 0.2s ease" }}
         placeholder="Type or select prop firm..."/>
       {open && filtered.length > 0 && (
-        <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, background:"#0f161e", border:"1px solid #1e2730", borderRadius:6, zIndex:300, maxHeight:160, overflowY:"auto", boxShadow:"0 8px 24px rgba(0,0,0,0.4)" }}>
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, right:0, background:"rgba(12,18,28,0.95)", border:"1px solid rgba(148,163,184,0.1)", borderRadius:12, zIndex:300, maxHeight:160, overflowY:"auto", boxShadow:"0 12px 40px rgba(0,0,0,0.5)", backdropFilter:"blur(16px)" }}>
           {filtered.map(f => (
             <div key={f} onClick={()=>{ setInput(f); onChange(f); setOpen(false); }}
-              style={{ padding:"9px 14px", fontSize:13, color:"#e2e8f0", cursor:"pointer", borderBottom:"1px solid #1a2030" }}
-              onMouseEnter={e=>e.currentTarget.style.background="#141c26"}
+              style={{ padding:"10px 16px", fontSize:13, color:"#e2e8f0", cursor:"pointer", borderBottom:"1px solid rgba(148,163,184,0.05)" }}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(14,165,233,0.06)"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{f}</div>
           ))}
         </div>
@@ -117,8 +117,8 @@ function ConfluenceCheckboxes({ selected, onChange, confluences }) {
   return (
     <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:6 }}>
       {confluences.map(c => (
-        <div key={c} onClick={()=>toggle(c)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:selected.includes(c)?"rgba(59,130,246,0.08)":"transparent", border:`1px solid ${selected.includes(c)?"rgba(59,130,246,0.4)":"#1e2730"}`, borderRadius:6, cursor:"pointer", transition:"all 0.15s" }}>
-          <div style={{ width:14, height:14, borderRadius:3, border:`1.5px solid ${selected.includes(c)?"#3b82f6":"#2d3a48"}`, background:selected.includes(c)?"#3b82f6":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.15s" }}>
+        <div key={c} onClick={()=>toggle(c)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:selected.includes(c)?"rgba(14,165,233,0.06)":"transparent", border:`1px solid ${selected.includes(c)?"rgba(14,165,233,0.3)":"rgba(148,163,184,0.08)"}`, borderRadius:6, cursor:"pointer", transition:"all 0.15s" }}>
+          <div style={{ width:14, height:14, borderRadius:3, border:`1.5px solid ${selected.includes(c)?"#0ea5e9":"#334155"}`, background:selected.includes(c)?"#0ea5e9":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.15s" }}>
             {selected.includes(c)&&<svg width="8" height="8" viewBox="0 0 8 8"><polyline points="1,4 3,6 7,2" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
           </div>
           <span style={{ fontSize:12, color:selected.includes(c)?"#93c5fd":"#6b7a8d", fontFamily:"'DM Sans',sans-serif" }}>{c}</span>
@@ -136,17 +136,17 @@ function AccountCheckboxes({ accounts, selected, onChange, label }) {
     <div>
       {label && <div style={{ fontSize:11, color:"#4a5568", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8, fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>{label}</div>}
       {!active.length
-        ? <div style={{ fontSize:12, color:"#4a5568", padding:"10px 12px", background:"#0c1117", border:"1px solid #1e2730", borderRadius:6, fontFamily:"'DM Sans',sans-serif" }}>No active accounts</div>
+        ? <div style={{ fontSize:12, color:"#4a5568", padding:"10px 12px", background:"rgba(15,23,35,0.4)", border:"1px solid rgba(148,163,184,0.08)", borderRadius:6, fontFamily:"'DM Sans',sans-serif" }}>No active accounts</div>
         : <>
-          <div onClick={toggleAll} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", background:"transparent", border:"1px solid #1e2730", borderRadius:6, cursor:"pointer", marginBottom:6, transition:"all 0.15s" }}>
-            <div style={{ width:14, height:14, borderRadius:3, border:`1.5px solid ${selected.length===active.length?"#3b82f6":"#2d3a48"}`, background:selected.length===active.length?"#3b82f6":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <div onClick={toggleAll} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", background:"transparent", border:"1px solid rgba(148,163,184,0.08)", borderRadius:6, cursor:"pointer", marginBottom:6, transition:"all 0.15s" }}>
+            <div style={{ width:14, height:14, borderRadius:3, border:`1.5px solid ${selected.length===active.length?"#0ea5e9":"#334155"}`, background:selected.length===active.length?"#0ea5e9":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
               {selected.length===active.length&&<svg width="8" height="8" viewBox="0 0 8 8"><polyline points="1,4 3,6 7,2" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             </div>
             <span style={{ fontSize:12, color:"#6b7a8d", fontFamily:"'DM Sans',sans-serif" }}>Select all accounts</span>
           </div>
           {active.map(a => (
-            <div key={a.id} onClick={()=>toggle(a.id)} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:selected.includes(a.id)?"rgba(59,130,246,0.06)":"transparent", border:`1px solid ${selected.includes(a.id)?"rgba(59,130,246,0.35)":"#1e2730"}`, borderRadius:6, cursor:"pointer", transition:"all 0.15s", marginBottom:5 }}>
-              <div style={{ width:14, height:14, borderRadius:3, border:`1.5px solid ${selected.includes(a.id)?"#3b82f6":"#2d3a48"}`, background:selected.includes(a.id)?"#3b82f6":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <div key={a.id} onClick={()=>toggle(a.id)} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:selected.includes(a.id)?"rgba(14,165,233,0.05)":"transparent", border:`1px solid ${selected.includes(a.id)?"rgba(14,165,233,0.25)":"rgba(148,163,184,0.08)"}`, borderRadius:6, cursor:"pointer", transition:"all 0.15s", marginBottom:5 }}>
+              <div style={{ width:14, height:14, borderRadius:3, border:`1.5px solid ${selected.includes(a.id)?"#0ea5e9":"#334155"}`, background:selected.includes(a.id)?"#0ea5e9":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 {selected.includes(a.id)&&<svg width="8" height="8" viewBox="0 0 8 8"><polyline points="1,4 3,6 7,2" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
               </div>
               <div style={{ flex:1 }}>
@@ -594,86 +594,88 @@ export default function App() {
   ];
 
   // Shared input style
-  const inp={width:"100%",background:"#0c1117",border:"1px solid #1e2730",borderRadius:6,padding:"9px 12px",color:"#e2e8f0",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",boxSizing:"border-box",transition:"border-color 0.15s"};
-  const lbl={display:"block",color:"#4a5568",fontSize:11,marginBottom:6,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",fontWeight:600};
+  const inp={width:"100%",background:"rgba(15,23,35,0.5)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:10,padding:"10px 14px",color:"#e2e8f0",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",boxSizing:"border-box",transition:"all 0.2s ease"};
+  const lbl={display:"block",color:"#64748b",fontSize:11,marginBottom:7,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",fontWeight:600};
 
   return (
-    <div style={{fontFamily:"'DM Sans','Inter',sans-serif",background:"#080d12",minHeight:"100vh",color:"#e2e8f0",width:"100%"}}>
+    <div style={{fontFamily:"'DM Sans','Inter',sans-serif",background:"transparent",minHeight:"100vh",color:"#e2e8f0",width:"100%"}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
-        html,body,#root{width:100%;min-height:100vh;background:#080d12}
-        ::-webkit-scrollbar{width:4px;height:4px}
+        html,body,#root{width:100%;min-height:100vh;background:#050a10}
+        body{background:#050a10;background-image:radial-gradient(ellipse 80% 60% at 50% -20%,rgba(14,165,233,0.08),transparent),radial-gradient(ellipse 60% 40% at 80% 100%,rgba(6,182,212,0.05),transparent)}
+        ::-webkit-scrollbar{width:5px;height:5px}
         ::-webkit-scrollbar-track{background:transparent}
-        ::-webkit-scrollbar-thumb{background:#1e2a38;border-radius:4px}
-        ::-webkit-scrollbar-thumb:hover{background:#2d3a4a}
+        ::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.12);border-radius:6px}
+        ::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,0.2)}
 
-        .card{background:#0c1117;border:1px solid #141c26;border-radius:10px;padding:20px;transition:border-color 0.2s}
-        .card:hover{border-color:#1e2a38}
+        .card{background:rgba(15,23,35,0.6);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(148,163,184,0.08);border-radius:16px;padding:24px;transition:all 0.25s ease;box-shadow:0 4px 24px rgba(0,0,0,0.15)}
+        .card:hover{border-color:rgba(14,165,233,0.15);box-shadow:0 8px 32px rgba(0,0,0,0.2),0 0 0 1px rgba(14,165,233,0.05)}
 
-        .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:7px;font-size:12px;font-weight:600;letter-spacing:0.04em;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all 0.15s;white-space:nowrap}
-        .btn-primary{background:#3b82f6;color:#fff}.btn-primary:hover{background:#2563eb}
-        .btn-ghost{background:transparent;color:#64748b;border:1px solid #1e2730}.btn-ghost:hover{color:#94a3b8;border-color:#2d3a4a;background:#0f161e}
-        .btn-danger{background:transparent;color:#f87171;border:1px solid #2d1515}.btn-danger:hover{background:#1a0a0a}
-        .btn-success{background:rgba(34,197,94,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2)}.btn-success:hover{background:rgba(34,197,94,0.15)}
-        .btn-sm{padding:5px 11px;font-size:11px}
+        .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;border-radius:10px;font-size:12px;font-weight:600;letter-spacing:0.03em;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all 0.2s ease;white-space:nowrap}
+        .btn-primary{background:linear-gradient(135deg,#0ea5e9,#06b6d4);color:#fff;box-shadow:0 2px 12px rgba(14,165,233,0.25)}.btn-primary:hover{box-shadow:0 4px 20px rgba(14,165,233,0.4);transform:translateY(-1px)}
+        .btn-ghost{background:rgba(148,163,184,0.04);color:#64748b;border:1px solid rgba(148,163,184,0.1)}.btn-ghost:hover{color:#cbd5e1;border-color:rgba(148,163,184,0.2);background:rgba(148,163,184,0.08)}
+        .btn-danger{background:rgba(248,113,113,0.06);color:#f87171;border:1px solid rgba(248,113,113,0.12)}.btn-danger:hover{background:rgba(248,113,113,0.12);border-color:rgba(248,113,113,0.25)}
+        .btn-success{background:rgba(34,197,94,0.08);color:#4ade80;border:1px solid rgba(74,222,128,0.15)}.btn-success:hover{background:rgba(34,197,94,0.14)}
+        .btn-sm{padding:6px 13px;font-size:11px;border-radius:8px}
 
-        .overlay{position:fixed;inset:0;background:rgba(4,7,10,0.85);backdrop-filter:blur(12px);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto}
-        .modal{background:#0c1117;border:1px solid #1e2730;border-radius:14px;width:100%;max-width:860px;padding:32px;margin:auto;box-shadow:0 24px 64px rgba(0,0,0,0.6)}
+        .overlay{position:fixed;inset:0;background:rgba(2,5,10,0.8);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto}
+        .modal{background:rgba(12,18,28,0.95);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(148,163,184,0.1);border-radius:20px;width:100%;max-width:860px;padding:36px;margin:auto;box-shadow:0 32px 80px rgba(0,0,0,0.5),0 0 0 1px rgba(14,165,233,0.04)}
 
-        .dz{border:1px dashed #1e2730;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all 0.2s;background:#090e14}
-        .dz:hover{border-color:#3b82f6;background:#0c1520}
+        .dz{border:1.5px dashed rgba(14,165,233,0.2);border-radius:14px;padding:32px;text-align:center;cursor:pointer;transition:all 0.25s;background:rgba(14,165,233,0.02)}
+        .dz:hover{border-color:rgba(14,165,233,0.4);background:rgba(14,165,233,0.05);box-shadow:0 0 24px rgba(14,165,233,0.06)}
 
-        .toast{position:fixed;bottom:24px;right:24px;padding:11px 18px;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:500;z-index:999;animation:slideup 0.2s ease;box-shadow:0 8px 24px rgba(0,0,0,0.4)}
-        @keyframes slideup{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
+        .toast{position:fixed;bottom:28px;right:28px;padding:13px 22px;border-radius:12px;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:500;z-index:999;animation:slideup 0.3s cubic-bezier(0.16,1,0.3,1);box-shadow:0 12px 40px rgba(0,0,0,0.4);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+        @keyframes slideup{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
 
-        .nav-tab{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;letter-spacing:0.03em;border:none;font-family:'DM Sans',sans-serif}
-        .nav-active{background:#141c26;color:#e2e8f0}
-        .nav-inactive{background:transparent;color:#4a5568}.nav-inactive:hover{color:#94a3b8}
+        .nav-tab{padding:8px 16px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s ease;letter-spacing:0.03em;border:none;font-family:'DM Sans',sans-serif}
+        .nav-active{background:rgba(14,165,233,0.1);color:#e2e8f0;box-shadow:0 0 12px rgba(14,165,233,0.08)}
+        .nav-inactive{background:transparent;color:#475569}.nav-inactive:hover{color:#94a3b8;background:rgba(148,163,184,0.04)}
 
-        .stat-card{background:#0c1117;border:1px solid #141c26;border-radius:10px;padding:18px 20px;transition:border-color 0.2s}
-        .stat-card:hover{border-color:#1e2a38}
+        .stat-card{background:rgba(15,23,35,0.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(148,163,184,0.06);border-radius:14px;padding:22px 24px;transition:all 0.25s ease}
+        .stat-card:hover{border-color:rgba(14,165,233,0.12);box-shadow:0 4px 20px rgba(0,0,0,0.15)}
 
         .mono{font-family:'DM Mono',monospace}
 
-        .analytics-nav-item{padding:9px 14px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.15s;margin-bottom:3px;font-family:'DM Sans',sans-serif}
-        .analytics-nav-active{background:#141c26;color:#e2e8f0}
-        .analytics-nav-inactive{color:#4a5568}.analytics-nav-inactive:hover{color:#94a3b8;background:#0c1117}
+        .analytics-nav-item{padding:10px 16px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.2s ease;margin-bottom:4px;font-family:'DM Sans',sans-serif}
+        .analytics-nav-active{background:rgba(14,165,233,0.1);color:#e2e8f0}
+        .analytics-nav-inactive{color:#475569}.analytics-nav-inactive:hover{color:#94a3b8;background:rgba(148,163,184,0.04)}
 
-        .tag{display:inline-flex;align-items:center;padding:3px 9px;border-radius:5px;font-size:11px;font-weight:500;background:rgba(59,130,246,0.1);color:#93c5fd;border:1px solid rgba(59,130,246,0.15)}
+        .tag{display:inline-flex;align-items:center;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500;background:rgba(14,165,233,0.08);color:#7dd3fc;border:1px solid rgba(14,165,233,0.12)}
         .outcome-win{color:#4ade80}.outcome-loss{color:#f87171}.outcome-be{color:#fbbf24}
-        .bar-bg{background:#141c26;border-radius:3px;height:4px;overflow:hidden}
-        .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
-        .gallery-item{cursor:pointer;border-radius:10px;overflow:hidden;border:1px solid #141c26;transition:all 0.2s;background:#0c1117}
-        .gallery-item:hover{border-color:#3b82f6;transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.3)}
-        .cal-cell{padding:10px;border-radius:8px;min-height:80px;transition:border-color 0.15s;border:1px solid #141c26}
-        .section-title{font-size:11px;font-weight:600;color:#4a5568;letter-spacing:0.08em;text-transform:uppercase;font-family:'DM Sans',sans-serif}
-        .page-title{font-size:22px;font-weight:600;color:#e2e8f0;letter-spacing:-0.02em}
-        .page-sub{font-size:13px;color:#4a5568;margin-top:3px}
-        input:focus,textarea:focus,select:focus{border-color:#3b82f6!important}
-        .review-box{background:#090e14;border:1px solid #141c26;border-radius:8px;padding:16px;font-size:12px;line-height:1.75;color:#64748b;white-space:pre-wrap;margin-top:12px;font-family:'DM Sans',sans-serif}
+        .bar-bg{background:rgba(148,163,184,0.06);border-radius:4px;height:4px;overflow:hidden}
+        .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+        .gallery-item{cursor:pointer;border-radius:14px;overflow:hidden;border:1px solid rgba(148,163,184,0.06);transition:all 0.25s ease;background:rgba(15,23,35,0.5);backdrop-filter:blur(8px)}
+        .gallery-item:hover{border-color:rgba(14,165,233,0.2);transform:translateY(-3px);box-shadow:0 12px 32px rgba(0,0,0,0.25),0 0 0 1px rgba(14,165,233,0.06)}
+        .cal-cell{padding:12px;border-radius:10px;min-height:84px;transition:all 0.2s ease;border:1px solid rgba(148,163,184,0.05);background:rgba(15,23,35,0.3)}
+        .cal-cell:hover{border-color:rgba(148,163,184,0.1)}
+        .section-title{font-size:11px;font-weight:600;color:#64748b;letter-spacing:0.08em;text-transform:uppercase;font-family:'DM Sans',sans-serif}
+        .page-title{font-size:24px;font-weight:700;color:#f1f5f9;letter-spacing:-0.03em}
+        .page-sub{font-size:13px;color:#475569;margin-top:5px}
+        input:focus,textarea:focus,select:focus{border-color:rgba(14,165,233,0.5)!important;box-shadow:0 0 0 3px rgba(14,165,233,0.08)!important;outline:none}
+        .review-box{background:rgba(15,23,35,0.4);border:1px solid rgba(148,163,184,0.06);border-radius:12px;padding:18px;font-size:12px;line-height:1.8;color:#64748b;white-space:pre-wrap;margin-top:14px;font-family:'DM Sans',sans-serif}
         .pulse{animation:pulse 1.5s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-        .sep{border:none;border-top:1px solid #141c26;margin:0}
-        .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:0.05em}
+        .sep{border:none;border-top:1px solid rgba(148,163,184,0.06);margin:0}
+        .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:0.05em}
       `}</style>
 
       {toast&&<div className="toast" style={{
-        background:toast.type==="error"?"#120a0a":toast.type==="warn"?"#12100a":"#0a120e",
-        border:`1px solid ${toast.type==="error"?"#3a1515":toast.type==="warn"?"#3a2a0a":"#1a3a24"}`,
+        background:toast.type==="error"?"rgba(18,10,10,0.9)":toast.type==="warn"?"rgba(18,16,10,0.9)":"rgba(10,18,14,0.9)",
+        border:`1px solid ${toast.type==="error"?"rgba(248,113,113,0.2)":toast.type==="warn"?"rgba(251,191,36,0.2)":"rgba(74,222,128,0.2)"}`,
         color:toast.type==="error"?"#f87171":toast.type==="warn"?"#fbbf24":"#4ade80"
       }}>{toast.msg}</div>}
 
       {/* NAV */}
-      <div style={{borderBottom:"1px solid #141c26",padding:"0 28px",background:"#080d12",position:"sticky",top:0,zIndex:100}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:56}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:28,height:28,borderRadius:7,background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><polyline points="1,10 4,6 7,8 10,3 13,5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      <div style={{borderBottom:"1px solid rgba(148,163,184,0.06)",padding:"0 32px",background:"rgba(5,10,16,0.8)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",position:"sticky",top:0,zIndex:100}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:64}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,#0ea5e9,#06b6d4)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 12px rgba(14,165,233,0.3)"}}>
+              <svg width="15" height="15" viewBox="0 0 14 14" fill="none"><polyline points="1,10 4,6 7,8 10,3 13,5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
-            <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",letterSpacing:"-0.02em"}}>Trading Journal</div>
-            <div style={{fontSize:11,color:"#2d3a4a",marginLeft:4,paddingLeft:10,borderLeft:"1px solid #141c26"}}>NQ · ICT · IFVG</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#f1f5f9",letterSpacing:"-0.02em"}}>Trading Journal</div>
+            <div style={{fontSize:11,color:"#334155",marginLeft:4,paddingLeft:12,borderLeft:"1px solid rgba(148,163,184,0.08)"}}>NQ · ICT · IFVG</div>
           </div>
-          <div style={{display:"flex",gap:2,background:"#0c1117",border:"1px solid #141c26",borderRadius:9,padding:3}}>
+          <div style={{display:"flex",gap:2,background:"rgba(15,23,35,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:12,padding:4,backdropFilter:"blur(8px)"}}>
             {["dashboard","accounts","journal","analytics","screenshots","financials"].map(v=>(
               <button key={v} className={`nav-tab ${view===v?"nav-active":"nav-inactive"}`} onClick={()=>setView(v)} style={{textTransform:"capitalize"}}>{v}</button>
             ))}
@@ -698,7 +700,7 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{padding:"24px 28px",maxWidth:1400,margin:"0 auto"}}>
+      <div style={{padding:"32px 36px",maxWidth:1400,margin:"0 auto"}}>
 
         {/* ─── DASHBOARD ─── */}
         {view==="dashboard"&&(
@@ -708,7 +710,7 @@ export default function App() {
                 <div className="page-title">Overview</div>
                 <div className="page-sub">{trades.length} trades · {activeAccounts.length} active accounts</div>
               </div>
-              <div style={{display:"flex",gap:4,background:"#0c1117",border:"1px solid #141c26",borderRadius:8,padding:3}}>
+              <div style={{display:"flex",gap:4,background:"rgba(15,23,35,0.4)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8,padding:3}}>
                 <button className={`btn btn-sm ${!selectedAccount?"btn-ghost":"btn-ghost"}`} onClick={()=>setSelectedAccount(null)} style={{background:!selectedAccount?"#141c26":"transparent",color:!selectedAccount?"#e2e8f0":"#4a5568",border:"none"}}>All</button>
                 {activeAccounts.map(a=><button key={a.id} className="btn btn-sm" onClick={()=>setSelectedAccount(selectedAccount===a.id?null:a.id)} style={{background:selectedAccount===a.id?"#141c26":"transparent",color:selectedAccount===a.id?"#e2e8f0":"#4a5568",border:"none",fontSize:11}}>{a.name}</button>)}
               </div>
@@ -716,7 +718,7 @@ export default function App() {
 
             {!trades.length?(
               <div style={{textAlign:"center",padding:"100px 0"}}>
-                <div style={{width:56,height:56,borderRadius:14,background:"#0c1117",border:"1px solid #1e2730",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
+                <div style={{width:56,height:56,borderRadius:14,background:"rgba(15,23,35,0.4)",border:"1px solid rgba(148,163,184,0.08)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
                   <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><polyline points="2,16 7,10 11,13 16,6 20,9" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </div>
                 <div style={{fontSize:16,fontWeight:600,color:"#e2e8f0",marginBottom:8}}>No trades yet</div>
@@ -732,26 +734,26 @@ export default function App() {
             ):(
               <>
                 {/* Stats row */}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:8,marginBottom:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:12,marginBottom:20}}>
                   {[
                     {l:"Total P&L",v:fmt$(activeStats?.totalPnl||0),c:(activeStats?.totalPnl||0)>=0?"#4ade80":"#f87171"},
                     {l:"Win Rate",v:`${(activeStats?.winRate||0).toFixed(1)}%`,c:(activeStats?.winRate||0)>=50?"#4ade80":"#f87171"},
                     {l:"Profit Factor",v:(activeStats?.profitFactor||0)===999?"∞":(activeStats?.profitFactor||0).toFixed(2),c:(activeStats?.profitFactor||0)>=1.5?"#4ade80":"#f87171"},
-                    {l:"Avg R:R",v:`${(activeStats?.avgRR||0).toFixed(2)}R`,c:"#93c5fd"},
+                    {l:"Avg R:R",v:`${(activeStats?.avgRR||0).toFixed(2)}R`,c:"#7dd3fc"},
                     {l:"Trades",v:activeStats?.total||0,c:"#e2e8f0"},
                     {l:"Plan %",v:`${(activeStats?.followedPlanRate||0).toFixed(0)}%`,c:(activeStats?.followedPlanRate||0)>=70?"#4ade80":"#fbbf24"},
                     {l:"Win Streak",v:(activeStats?.winStreak||0)>0?`${activeStats.winStreak}W`:"—",c:(activeStats?.winStreak||0)>0?"#4ade80":"#4a5568"},
                     {l:"Green Days",v:(activeStats?.greenDayStreak||0)>0?`${activeStats.greenDayStreak}D`:"—",c:(activeStats?.greenDayStreak||0)>0?"#4ade80":"#4a5568"}
                   ].map(s=>(
                     <div key={s.l} className="stat-card">
-                      <div style={{fontSize:10,color:"#334155",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600,marginBottom:8}}>{s.l}</div>
+                      <div style={{fontSize:10,color:"#475569",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600,marginBottom:10}}>{s.l}</div>
                       <div className="mono" style={{fontSize:18,fontWeight:500,color:s.c}}>{s.v}</div>
                     </div>
                   ))}
                 </div>
 
                 {/* Equity + Accounts */}
-                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:16,marginBottom:20}}>
                   <div className="card">
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                       <div className="section-title">Equity Curve</div>
@@ -792,8 +794,8 @@ export default function App() {
                     <div className="section-title">P&L Calendar</div>
                     <div style={{display:"flex",gap:10,alignItems:"center"}}>
                       <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                        <button className="btn btn-sm" onClick={()=>setCalSelectedAccounts([])} style={{background:calSelectedAccounts.length===0?"#141c26":"transparent",color:calSelectedAccounts.length===0?"#e2e8f0":"#4a5568",border:"1px solid #1e2730",fontSize:11}}>All</button>
-                        {activeAccounts.map(a=><button key={a.id} className="btn btn-sm" onClick={()=>setCalSelectedAccounts(prev=>prev.includes(a.id)?prev.filter(x=>x!==a.id):[...prev,a.id])} style={{background:calSelectedAccounts.includes(a.id)?"#141c26":"transparent",color:calSelectedAccounts.includes(a.id)?"#e2e8f0":"#4a5568",border:"1px solid #1e2730",fontSize:11}}>{a.name}</button>)}
+                        <button className="btn btn-sm" onClick={()=>setCalSelectedAccounts([])} style={{background:calSelectedAccounts.length===0?"#141c26":"transparent",color:calSelectedAccounts.length===0?"#e2e8f0":"#4a5568",border:"1px solid rgba(148,163,184,0.08)",fontSize:11}}>All</button>
+                        {activeAccounts.map(a=><button key={a.id} className="btn btn-sm" onClick={()=>setCalSelectedAccounts(prev=>prev.includes(a.id)?prev.filter(x=>x!==a.id):[...prev,a.id])} style={{background:calSelectedAccounts.includes(a.id)?"#141c26":"transparent",color:calSelectedAccounts.includes(a.id)?"#e2e8f0":"#4a5568",border:"1px solid rgba(148,163,184,0.08)",fontSize:11}}>{a.name}</button>)}
                       </div>
                       <div style={{display:"flex",gap:4,alignItems:"center",borderLeft:"1px solid #141c26",paddingLeft:12}}>
                         <button onClick={()=>setCalMonth(p=>{const d=new Date(p.y,p.m-1);return{y:d.getFullYear(),m:d.getMonth()};})} className="btn btn-ghost btn-sm">‹</button>
@@ -813,7 +815,7 @@ export default function App() {
                     return(
                       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:20}}>
                         {[["Month P&L",fmt$(mPnl),mPnl>=0?"#4ade80":"#f87171"],["Trades",mTrades,"#e2e8f0"],["Win Rate",`${mWR.toFixed(0)}%`,mWR>=50?"#4ade80":"#f87171"],["Trading Days",mt.length,"#93c5fd"]].map(([l,v,c])=>(
-                          <div key={l} style={{background:"#090e14",border:"1px solid #141c26",borderRadius:8,padding:"14px 16px"}}>
+                          <div key={l} style={{background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8,padding:"14px 16px"}}>
                             <div className="section-title" style={{marginBottom:8}}>{l}</div>
                             <div className="mono" style={{fontSize:20,fontWeight:500,color:c}}>{v}</div>
                           </div>
@@ -875,7 +877,7 @@ export default function App() {
                 <button className="btn btn-primary" onClick={()=>setShowAccountForm(true)} style={{padding:"10px 24px"}}>Add First Account</button>
               </div>
             ):(
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
                 {accountStats.filter(a=>showDormant||!a.dormant).map((a)=>{
                   const realIdx=accounts.findIndex(ac=>ac.id===a.id);
                   return(
@@ -886,7 +888,7 @@ export default function App() {
                             <div style={{fontSize:15,fontWeight:600,color:a.dormant?"#4a5568":"#e2e8f0"}}>{a.name}</div>
                             {a.dormant&&<span className="badge" style={{background:"rgba(251,191,36,0.1)",color:"#fbbf24",border:"1px solid rgba(251,191,36,0.2)"}}>Dormant</span>}
                           </div>
-                          <div style={{fontSize:12,color:"#4a5568"}}>{a.firm} · <span style={{color:"#93c5fd"}}>{a.phase}</span></div>
+                          <div style={{fontSize:12,color:"#4a5568"}}>{a.firm} · <span style={{color:"#7dd3fc"}}>{a.phase}</span></div>
                         </div>
                         <div style={{textAlign:"right"}}>
                           <div className="mono" style={{fontSize:20,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
@@ -895,7 +897,7 @@ export default function App() {
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
                         {[["Trades",a.tradeCount,"#e2e8f0"],["Win Rate",a.stats?`${a.stats.winRate.toFixed(0)}%`:"—",a.stats?.winRate>=50?"#4ade80":"#f87171"],["Avg R:R",a.stats?`${a.stats.avgRR.toFixed(1)}R`:"—","#93c5fd"]].map(([l,v,c])=>(
-                          <div key={l} style={{background:"#090e14",border:"1px solid #141c26",borderRadius:7,padding:"10px 12px"}}>
+                          <div key={l} style={{background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7,padding:"10px 12px"}}>
                             <div className="section-title" style={{marginBottom:4}}>{l}</div>
                             <div className="mono" style={{fontSize:14,fontWeight:500,color:c}}>{v}</div>
                           </div>
@@ -908,7 +910,7 @@ export default function App() {
                         </div>
                         <div className="mono" style={{fontSize:18,fontWeight:600,color:a.totalProfit>=0?"#4ade80":"#f87171"}}>{a.totalProfit>=0?"+":""}{fmt$(a.totalProfit)}</div>
                       </div>
-                      <div style={{background:"#090e14",border:"1px solid #141c26",borderRadius:7,padding:"10px 14px",marginBottom:14}}>
+                      <div style={{background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7,padding:"10px 14px",marginBottom:14}}>
                         <div className="section-title" style={{marginBottom:8}}>Financials</div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
                           {[["Spent",fmt$(a.totalExpenses),"#f87171"],["Withdrawn",fmt$(a.totalPayouts),"#4ade80"],["Net",fmt$(a.netReal),a.netReal>=0?"#4ade80":"#f87171"]].map(([l,v,c])=>(
@@ -919,7 +921,7 @@ export default function App() {
                           ))}
                         </div>
                       </div>
-                      {a.notes&&<div style={{fontSize:12,color:"#4a5568",borderLeft:"2px solid #1e2730",paddingLeft:10,marginBottom:14,fontStyle:"italic",lineHeight:1.5}}>{a.notes}</div>}
+                      {a.notes&&<div style={{fontSize:12,color:"#4a5568",borderLeft:"2px solid rgba(148,163,184,0.1)",paddingLeft:10,marginBottom:14,fontStyle:"italic",lineHeight:1.5}}>{a.notes}</div>}
                       <div style={{display:"flex",gap:6}}>
                         <button onClick={()=>openEditAccount(realIdx)} className="btn btn-ghost btn-sm">Edit</button>
                         <button onClick={()=>toggleDormant(realIdx)} className="btn btn-sm" style={{background:"transparent",color:a.dormant?"#4ade80":"#fbbf24",border:`1px solid ${a.dormant?"rgba(74,222,128,0.2)":"rgba(251,191,36,0.2)"}`,fontSize:11}}>{a.dormant?"Reactivate":"Set Dormant"}</button>
@@ -960,11 +962,11 @@ export default function App() {
                       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                         <span style={{fontSize:12,color:"#64748b",fontWeight:500}}>
                           {t.date}
-                          {t.time&&<span className="mono" style={{color:"#93c5fd",marginLeft:6}}>{t.time}</span>}
+                          {t.time&&<span className="mono" style={{color:"#7dd3fc",marginLeft:6}}>{t.time}</span>}
                           {t.exitTime&&<span className="mono" style={{color:"#334155"}}>→{t.exitTime}</span>}
                         </span>
-                        {duration&&<span style={{fontSize:11,color:"#4a5568",background:"#0f161e",border:"1px solid #1e2730",padding:"2px 7px",borderRadius:5}}>{fmtDuration(duration)}</span>}
-                        {t.asset&&<span style={{fontSize:11,color:"#93c5fd",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",padding:"2px 8px",borderRadius:5}}>{t.asset}</span>}
+                        {duration&&<span style={{fontSize:11,color:"#4a5568",background:"rgba(15,22,30,0.6)",border:"1px solid rgba(148,163,184,0.08)",padding:"2px 7px",borderRadius:5}}>{fmtDuration(duration)}</span>}
+                        {t.asset&&<span style={{fontSize:11,color:"#7dd3fc",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",padding:"2px 8px",borderRadius:5}}>{t.asset}</span>}
                         <span style={{fontSize:12,fontWeight:500,color:t.bias==="Bullish"?"#4ade80":"#f87171"}}>{t.bias==="Bullish"?"↑":"↓"} {t.bias}</span>
                         {t.rating&&<span style={{fontSize:12,fontWeight:600,color:ratingColor(t.rating)}}>{t.rating}</span>}
                         {accs.map(a=><span key={a.id} style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",padding:"2px 8px",borderRadius:5}}>{a.name}</span>)}
@@ -991,8 +993,8 @@ export default function App() {
                       ))}
                     </div>
                     {(t.confluences||[]).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:10}}>{t.confluences.map(c=><span key={c} className="tag">{c}</span>)}</div>}
-                    {t.notes&&<div style={{marginTop:10,fontSize:12,color:"#4a5568",borderLeft:"2px solid #1e2730",paddingLeft:12,lineHeight:1.6}}>{t.notes}</div>}
-                    {t.screenshot&&<div style={{marginTop:12}}><img src={t.screenshot} alt="chart" style={{maxHeight:160,borderRadius:8,border:"1px solid #1e2730",objectFit:"contain",cursor:"pointer"}} onClick={()=>setExpandedScreenshot(t)}/></div>}
+                    {t.notes&&<div style={{marginTop:10,fontSize:12,color:"#4a5568",borderLeft:"2px solid rgba(148,163,184,0.1)",paddingLeft:12,lineHeight:1.6}}>{t.notes}</div>}
+                    {t.screenshot&&<div style={{marginTop:12}}><img src={t.screenshot} alt="chart" style={{maxHeight:160,borderRadius:8,border:"1px solid rgba(148,163,184,0.08)",objectFit:"contain",cursor:"pointer"}} onClick={()=>setExpandedScreenshot(t)}/></div>}
                     <div style={{marginTop:12}}>
                       <button onClick={()=>runAiReview(t)} disabled={aiReviewLoading} className="btn btn-ghost btn-sm">
                         {aiReviewLoading?"Analysing...":"✦ AI Review"}
@@ -1064,7 +1066,7 @@ export default function App() {
                         <>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:20}}>
                             {[["Avg Achieved",`${(stats.rrVsPotential.reduce((s,t)=>s+t.achieved,0)/stats.rrVsPotential.length).toFixed(2)}R`,"#4ade80"],["Avg Potential",`${(stats.rrVsPotential.reduce((s,t)=>s+t.potential,0)/stats.rrVsPotential.length).toFixed(2)}R`,"#93c5fd"],["Avg Left on Table",`${stats.avgLeft.toFixed(2)}R`,stats.avgLeft>1?"#f87171":"#fbbf24"]].map(([l,v,c])=>(
-                              <div key={l} style={{background:"#090e14",border:"1px solid #141c26",borderRadius:8,padding:16,textAlign:"center"}}>
+                              <div key={l} style={{background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8,padding:16,textAlign:"center"}}>
                                 <div className="section-title" style={{marginBottom:8}}>{l}</div>
                                 <div className="mono" style={{fontSize:22,fontWeight:500,color:c}}>{v}</div>
                               </div>
@@ -1072,14 +1074,14 @@ export default function App() {
                           </div>
                           <div style={{display:"flex",flexDirection:"column",gap:6}}>
                             {stats.rrVsPotential.slice(0,20).map((t,i)=>(
-                              <div key={i} style={{display:"grid",gridTemplateColumns:"100px 1fr 70px 70px 70px",gap:10,alignItems:"center",padding:"10px 14px",background:"#090e14",border:"1px solid #141c26",borderRadius:7}}>
+                              <div key={i} style={{display:"grid",gridTemplateColumns:"100px 1fr 70px 70px 70px",gap:10,alignItems:"center",padding:"10px 14px",background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7}}>
                                 <div style={{fontSize:11,color:"#4a5568"}}>{t.date}</div>
                                 <div style={{position:"relative",height:6,background:"#141c26",borderRadius:3}}>
                                   <div style={{position:"absolute",left:0,width:`${Math.min(100,(t.potential/5)*100)}%`,height:"100%",background:"#1e3a5a",borderRadius:3}}/>
                                   <div style={{position:"absolute",left:0,width:`${Math.min(100,(Math.max(0,t.achieved)/5)*100)}%`,height:"100%",background:t.achieved>=0?"#4ade80":"#f87171",borderRadius:3}}/>
                                 </div>
                                 <div className="mono" style={{fontSize:12,color:"#4ade80",textAlign:"right"}}>+{t.achieved.toFixed(1)}R</div>
-                                <div className="mono" style={{fontSize:12,color:"#93c5fd",textAlign:"right"}}>{t.potential.toFixed(1)}R</div>
+                                <div className="mono" style={{fontSize:12,color:"#7dd3fc",textAlign:"right"}}>{t.potential.toFixed(1)}R</div>
                                 <div className="mono" style={{fontSize:12,color:t.left>1?"#f87171":"#fbbf24",textAlign:"right"}}>-{t.left.toFixed(1)}R</div>
                               </div>
                             ))}
@@ -1112,7 +1114,7 @@ export default function App() {
                         <div style={{fontSize:12,color:"#4a5568",marginBottom:20}}>How long your trades last on average</div>
                         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
                           {[["Avg Duration",fmtDuration(stats.avgDuration),"#e2e8f0"],["Avg Win Duration",fmtDuration(stats.avgWinDuration),"#4ade80"],["Avg Loss Duration",fmtDuration(stats.avgLossDuration),"#f87171"]].map(([l,v,c])=>(
-                            <div key={l} style={{background:"#090e14",border:"1px solid #141c26",borderRadius:8,padding:16,textAlign:"center"}}>
+                            <div key={l} style={{background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8,padding:16,textAlign:"center"}}>
                               <div className="section-title" style={{marginBottom:10}}>{l}</div>
                               <div className="mono" style={{fontSize:22,fontWeight:500,color:c}}>{v}</div>
                             </div>
@@ -1128,7 +1130,7 @@ export default function App() {
                       {TRADE_RATINGS.filter(r=>stats.ratingMap[r]?.count>0).map(r=>{
                         const d=stats.ratingMap[r];const wr=(d.wins/(d.wins+d.losses||1))*100;
                         return(
-                          <div key={r} style={{marginBottom:8,padding:"14px 18px",background:"#090e14",border:"1px solid #141c26",borderRadius:8}}>
+                          <div key={r} style={{marginBottom:8,padding:"14px 18px",background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                               <div style={{display:"flex",gap:14,alignItems:"center"}}>
                                 <div className="mono" style={{fontSize:18,fontWeight:500,color:ratingColor(r),minWidth:32}}>{r}</div>
@@ -1153,7 +1155,7 @@ export default function App() {
                       {Object.entries(stats.confMap).filter(([,d])=>d.count>0).sort((a,b)=>b[1].pnl-a[1].pnl).map(([conf,d])=>{
                         const wr=(d.wins/(d.wins+d.losses||1))*100;
                         return(
-                          <div key={conf} style={{marginBottom:8,padding:"14px 18px",background:"#090e14",border:"1px solid #141c26",borderRadius:8}}>
+                          <div key={conf} style={{marginBottom:8,padding:"14px 18px",background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                               <div>
                                 <div style={{fontSize:13,color:"#e2e8f0",fontWeight:500,marginBottom:4}}>{conf}</div>
@@ -1212,12 +1214,12 @@ export default function App() {
                         </div>
                         <div className="card">
                           <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:16}}>Day of Week</div>
-                          {stats.mostActiveDay&&<div style={{marginBottom:10,padding:14,background:"#090e14",border:"1px solid #141c26",borderRadius:8}}>
+                          {stats.mostActiveDay&&<div style={{marginBottom:10,padding:14,background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8}}>
                             <div className="section-title" style={{marginBottom:6}}>Most Active</div>
                             <div className="mono" style={{fontSize:18,fontWeight:500,color:"#fbbf24"}}>{stats.mostActiveDay[0]}</div>
                             <div style={{fontSize:11,color:"#334155",marginTop:4}}>{stats.mostActiveDay[1].count} trades</div>
                           </div>}
-                          {stats.bestWRDay&&<div style={{padding:14,background:"#090e14",border:"1px solid #141c26",borderRadius:8}}>
+                          {stats.bestWRDay&&<div style={{padding:14,background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8}}>
                             <div className="section-title" style={{marginBottom:6}}>Best Win Rate</div>
                             <div className="mono" style={{fontSize:18,fontWeight:500,color:"#4ade80"}}>{stats.bestWRDay[0]}</div>
                             <div style={{fontSize:11,color:"#334155",marginTop:4}}>{((stats.bestWRDay[1].wins/(stats.bestWRDay[1].wins+stats.bestWRDay[1].losses||1))*100).toFixed(0)}% WR · {stats.bestWRDay[1].count} trades</div>
@@ -1230,7 +1232,7 @@ export default function App() {
                           {Object.entries(stats.dowMap).filter(([,d])=>d.count>0).sort((a,b)=>b[1].pnl-a[1].pnl).map(([day,d])=>{
                             const wr=(d.wins/(d.wins+d.losses||1))*100;
                             return(
-                              <div key={day} style={{display:"grid",gridTemplateColumns:"100px 1fr 50px 60px 90px",gap:10,alignItems:"center",padding:"10px 14px",background:"#090e14",border:"1px solid #141c26",borderRadius:7}}>
+                              <div key={day} style={{display:"grid",gridTemplateColumns:"100px 1fr 50px 60px 90px",gap:10,alignItems:"center",padding:"10px 14px",background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7}}>
                                 <div style={{fontSize:13,color:"#94a3b8",fontWeight:500}}>{day}</div>
                                 <div className="bar-bg" style={{height:4}}><div style={{width:`${wr}%`,height:"100%",background:wr>=50?"#4ade80":"#f87171",borderRadius:3}}/></div>
                                 <div style={{fontSize:11,color:"#334155",textAlign:"right"}}>{d.count}t</div>
@@ -1292,7 +1294,7 @@ export default function App() {
                             ["Avg Payout (on pass)",propFirmStats.passed?fmt$(propFirmStats.avgPayoutOnPass):"—","#4ade80"],
                             ["Avg Spend (on fail)",propFirmStats.failed?fmt$(propFirmStats.avgSpendOnFail):"—","#f87171"],
                           ].map(([l,v,c])=>(
-                            <div key={l} style={{background:"#090e14",border:"1px solid #141c26",borderRadius:8,padding:16,textAlign:"center"}}>
+                            <div key={l} style={{background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8,padding:16,textAlign:"center"}}>
                               <div className="section-title" style={{marginBottom:8}}>{l}</div>
                               <div className="mono" style={{fontSize:20,fontWeight:500,color:c}}>{v}</div>
                             </div>
@@ -1318,7 +1320,7 @@ export default function App() {
                         <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:16}}>Real Money Summary</div>
                         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
                           {[["Total Fees Paid",fmt$(propFirmStats.totalSpent),"#f87171"],["Total Withdrawn",fmt$(propFirmStats.totalPayouts),"#4ade80"],["Net Real P&L",fmt$(propFirmStats.net),propFirmStats.net>=0?"#4ade80":"#f87171"]].map(([l,v,c])=>(
-                            <div key={l} style={{background:"#090e14",border:"1px solid #141c26",borderRadius:8,padding:20,textAlign:"center"}}>
+                            <div key={l} style={{background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8,padding:20,textAlign:"center"}}>
                               <div className="section-title" style={{marginBottom:10}}>{l}</div>
                               <div className="mono" style={{fontSize:24,fontWeight:500,color:c}}>{v}</div>
                             </div>
@@ -1337,7 +1339,7 @@ export default function App() {
                               const statusColor = a.payoutReceived?"#a78bfa":a.passed?"#4ade80":a.failed?"#f87171":"#fbbf24";
                               const statusLabel = a.payoutReceived?"💰 Payout":a.passed?"✓ Passed":a.failed?"✗ Failed":"⏳ Pending";
                               return(
-                                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 120px 110px 110px 110px 120px",gap:10,alignItems:"center",padding:"12px 16px",background:"#090e14",border:"1px solid #141c26",borderRadius:8}}>
+                                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 120px 110px 110px 110px 120px",gap:10,alignItems:"center",padding:"12px 16px",background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8}}>
                                   <div>
                                     <div style={{fontSize:13,color:"#e2e8f0",fontWeight:500}}>{a.account.name}</div>
                                     <div style={{fontSize:11,color:"#4a5568"}}>{a.account.firm||"—"} · {a.account.phase}</div>
@@ -1364,7 +1366,7 @@ export default function App() {
                               const passR = f.count?(f.passed/f.count)*100:0;
                               const net = f.payout-f.spent;
                               return(
-                                <div key={f.firm} style={{padding:"14px 18px",background:"#090e14",border:"1px solid #141c26",borderRadius:8}}>
+                                <div key={f.firm} style={{padding:"14px 18px",background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8}}>
                                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                                     <div>
                                       <div style={{fontSize:14,color:"#e2e8f0",fontWeight:500,marginBottom:3}}>{f.firm}</div>
@@ -1427,7 +1429,7 @@ export default function App() {
                       </div>
                       <div style={{padding:"10px 14px"}}>
                         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                          <span style={{fontSize:12,color:"#4a5568"}}>{t.date}{t.time&&<span className="mono" style={{color:"#93c5fd",marginLeft:6}}>{t.time}</span>}</span>
+                          <span style={{fontSize:12,color:"#4a5568"}}>{t.date}{t.time&&<span className="mono" style={{color:"#7dd3fc",marginLeft:6}}>{t.time}</span>}</span>
                           {t.rr&&<span className="mono" style={{fontSize:11,color:"#4a5568"}}>{t.rr}R</span>}
                         </div>
                         {(t.confluences||[]).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:4}}>{t.confluences.slice(0,3).map(c=><span key={c} className="tag">{c}</span>)}{t.confluences.length>3&&<span className="tag">+{t.confluences.length-3}</span>}</div>}
@@ -1520,7 +1522,7 @@ export default function App() {
                           <span className="badge" style={{background:tx.type==="payout"?"rgba(74,222,128,0.1)":"rgba(248,113,113,0.1)",color:tx.type==="payout"?"#4ade80":"#f87171",border:`1px solid ${tx.type==="payout"?"rgba(74,222,128,0.2)":"rgba(248,113,113,0.2)"}`}}>{tx.type==="challenge_fee"?"Challenge Fee":tx.type==="activation_fee"?"Activation Fee":tx.type==="payout"?"Payout":"Expense"}</span>
                           <span className="mono" style={{fontSize:12,color:"#64748b"}}>{tx.date}</span>
                           {linkedAcc&&<span style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.15)",padding:"2px 8px",borderRadius:5}}>{linkedAcc.name}</span>}
-                          {(tx.firm||(linkedAcc&&linkedAcc.firm))&&<span style={{fontSize:11,color:"#93c5fd",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",padding:"2px 8px",borderRadius:5}}>{tx.firm||linkedAcc.firm}</span>}
+                          {(tx.firm||(linkedAcc&&linkedAcc.firm))&&<span style={{fontSize:11,color:"#7dd3fc",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",padding:"2px 8px",borderRadius:5}}>{tx.firm||linkedAcc.firm}</span>}
                           {tx.accountStatus&&<span style={{fontSize:11,fontWeight:600,color:statusColors[tx.accountStatus],background:`${statusColors[tx.accountStatus]}15`,border:`1px solid ${statusColors[tx.accountStatus]}30`,padding:"2px 8px",borderRadius:5}}>{statusLabels[tx.accountStatus]}</span>}
                           {tx.notes&&<span style={{fontSize:12,color:"#4a5568",fontStyle:"italic"}}>{tx.notes}</span>}
                         </div>
@@ -1551,14 +1553,14 @@ export default function App() {
               </div>
               <button onClick={()=>setExpandedScreenshot(null)} style={{background:"none",border:"none",color:"#4a5568",fontSize:20,cursor:"pointer",lineHeight:1}}>✕</button>
             </div>
-            <img src={expandedScreenshot.screenshot} alt="chart" style={{width:"100%",borderRadius:10,border:"1px solid #1e2730",marginBottom:16}}/>
+            <img src={expandedScreenshot.screenshot} alt="chart" style={{width:"100%",borderRadius:10,border:"1px solid rgba(148,163,184,0.08)",marginBottom:16}}/>
             <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:12}}>
               {[["Asset",expandedScreenshot.asset||"MNQ","#93c5fd"],["Entry",expandedScreenshot.entry,"#e2e8f0"],["Exit",expandedScreenshot.exit,"#e2e8f0"],["SL",expandedScreenshot.stopLoss,"#f87171"],["TP",expandedScreenshot.takeProfit,"#4ade80"],["R:R",expandedScreenshot.rr?expandedScreenshot.rr+"R":null,"#64748b"],["Max R:R",expandedScreenshot.maxPotentialRR?expandedScreenshot.maxPotentialRR+"R":null,"#4a5568"],["Risk",`$${expandedScreenshot.risk||250}`,"#64748b"]].map(([l,v,c])=>(
                 v&&<span key={l} style={{fontSize:12,color:"#4a5568"}}>{l}: <span className="mono" style={{color:c}}>{v}</span></span>
               ))}
             </div>
             {(expandedScreenshot.confluences||[]).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:10}}>{expandedScreenshot.confluences.map(c=><span key={c} className="tag">{c}</span>)}</div>}
-            {expandedScreenshot.notes&&<div style={{fontSize:12,color:"#4a5568",fontStyle:"italic",borderLeft:"2px solid #1e2730",paddingLeft:12,lineHeight:1.6}}>{expandedScreenshot.notes}</div>}
+            {expandedScreenshot.notes&&<div style={{fontSize:12,color:"#4a5568",fontStyle:"italic",borderLeft:"2px solid rgba(148,163,184,0.1)",paddingLeft:12,lineHeight:1.6}}>{expandedScreenshot.notes}</div>}
           </div>
         </div>
       )}
@@ -1577,7 +1579,7 @@ export default function App() {
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:400,overflowY:"auto"}}>
               {confluences.map((c,i)=>(
-                <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"#090e14",border:"1px solid #141c26",borderRadius:7}}>
+                <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7}}>
                   <span style={{fontSize:13,color:"#94a3b8"}}>{c}</span>
                   <button onClick={()=>setConfluences(prev=>prev.filter((_,j)=>j!==i))} className="btn btn-danger btn-sm">Remove</button>
                 </div>
@@ -1601,7 +1603,7 @@ export default function App() {
               <div><label style={lbl}>Phase</label><Select value={accountForm.phase} onChange={e=>saf("phase",e.target.value)} options={["Phase 1","Phase 2","Funded","Verification"]}/></div>
               <div><label style={lbl}>Account Size ($)</label><input type="number" value={accountForm.size} onChange={e=>saf("size",e.target.value)} style={inp} placeholder="50000"/></div>
               <div><label style={lbl}>Starting Balance ($)</label><input type="number" value={accountForm.startingBalance} onChange={e=>saf("startingBalance",e.target.value)} style={inp} placeholder="50000"/></div>
-              <div style={{gridColumn:"1/-1",background:"rgba(148,163,184,0.04)",border:"1px solid #1e2730",borderRadius:7,padding:"14px"}}>
+              <div style={{gridColumn:"1/-1",background:"rgba(148,163,184,0.04)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:7,padding:"14px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                   <label style={lbl}>Manual Balance Adjustments</label>
                   <button onClick={()=>setShowAdjustmentForm(showAdjustmentForm===accountForm.id?null:accountForm.id)} className="btn btn-ghost" style={{fontSize:10,padding:"3px 8px"}}>{showAdjustmentForm===accountForm.id?"Cancel":"+ Add"}</button>
@@ -1610,11 +1612,11 @@ export default function App() {
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,marginBottom:10,alignItems:"end"}}>
                     <div>
                       <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Amount ($)</div>
-                      <input type="number" value={adjustmentForm.amount} onChange={e=>setAdjustmentForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",background:"#0b1118",border:"1px solid #1e2730",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="+500 or -200"/>
+                      <input type="number" value={adjustmentForm.amount} onChange={e=>setAdjustmentForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",background:"rgba(12,18,28,0.5)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="+500 or -200"/>
                     </div>
                     <div>
                       <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Reason</div>
-                      <input value={adjustmentForm.reason} onChange={e=>setAdjustmentForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",background:"#0b1118",border:"1px solid #1e2730",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="e.g. Data correction"/>
+                      <input value={adjustmentForm.reason} onChange={e=>setAdjustmentForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",background:"rgba(12,18,28,0.5)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="e.g. Data correction"/>
                     </div>
                     <button onClick={()=>submitAdjustment(accountForm.id)} className="btn btn-primary" style={{fontSize:11,padding:"7px 14px"}}>Submit</button>
                   </div>
@@ -1622,7 +1624,7 @@ export default function App() {
                 {(()=>{const adjs=balanceAdjustments.filter(a=>a.accountId===accountForm.id);return adjs.length>0?(
                   <div style={{maxHeight:150,overflowY:"auto"}}>
                     {adjs.sort((x,y)=>y.id-x.id).map(adj=>(
-                      <div key={adj.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #141c26",fontSize:11}}>
+                      <div key={adj.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid rgba(148,163,184,0.06)",fontSize:11}}>
                         <div style={{display:"flex",gap:8,alignItems:"center"}}>
                           <span className="mono" style={{color:parseFloat(adj.amount)>=0?"#4ade80":"#f87171",fontWeight:500}}>{parseFloat(adj.amount)>=0?"+":""}{fmt$(parseFloat(adj.amount))}</span>
                           <span style={{color:"#4a5568"}}>{adj.reason||"No reason"}</span>
@@ -1680,7 +1682,7 @@ export default function App() {
                   <div style={{position:"absolute",top:8,right:8,background:"rgba(6,10,15,0.85)",borderRadius:5,padding:"3px 10px",fontSize:11,color:"#4ade80",fontWeight:500}}>✓ Chart attached</div>
                 </div>
               ):aiLoading?(
-                <div className="pulse" style={{color:"#93c5fd",fontSize:13}}>✦ AI extracting trade levels...</div>
+                <div className="pulse" style={{color:"#7dd3fc",fontSize:13}}>✦ AI extracting trade levels...</div>
               ):(
                 <>
                   <div style={{fontSize:24,marginBottom:8}}>📊</div>
@@ -1753,8 +1755,8 @@ export default function App() {
             <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:20}}>
               <div style={{overflowX:"auto",maxHeight:360,overflowY:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                  <thead style={{position:"sticky",top:0,background:"#0c1117"}}>
-                    <tr style={{borderBottom:"1px solid #141c26"}}>
+                  <thead style={{position:"sticky",top:0,background:"rgba(15,23,35,0.4)"}}>
+                    <tr style={{borderBottom:"1px solid rgba(148,163,184,0.06)"}}>
                       {["Date","Time","Asset","Dir","Entry","Exit","Qty","Net P&L","Outcome"].map(h=><th key={h} style={{padding:"7px 10px",fontWeight:600,fontSize:10,textAlign:"left",color:"#334155",textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</th>)}
                     </tr>
                   </thead>
@@ -1764,8 +1766,8 @@ export default function App() {
                       return(
                         <tr key={i} style={{borderBottom:"1px solid #0f161e"}}>
                           <td style={{padding:"7px 10px",color:"#64748b"}}>{t.date}</td>
-                          <td style={{padding:"7px 10px"}}><span className="mono" style={{color:"#93c5fd"}}>{t.time}</span></td>
-                          <td style={{padding:"7px 10px"}}><span className="mono" style={{color:"#93c5fd"}}>{t.asset||"MNQ"}</span></td>
+                          <td style={{padding:"7px 10px"}}><span className="mono" style={{color:"#7dd3fc"}}>{t.time}</span></td>
+                          <td style={{padding:"7px 10px"}}><span className="mono" style={{color:"#7dd3fc"}}>{t.asset||"MNQ"}</span></td>
                           <td style={{padding:"7px 10px",color:t.bias==="Bullish"?"#4ade80":"#f87171"}}>{t.bias==="Bullish"?"↑":"↓"}</td>
                           <td style={{padding:"7px 10px"}}><span className="mono" style={{color:"#94a3b8"}}>{t.entry}</span></td>
                           <td style={{padding:"7px 10px"}}><span className="mono" style={{color:"#94a3b8"}}>{t.exit}</span></td>
@@ -1780,7 +1782,7 @@ export default function App() {
               </div>
               <div>
                 <AccountCheckboxes accounts={activeAccounts} selected={importSelectedAccounts} onChange={setImportSelectedAccounts} label="Apply to accounts"/>
-                {importSelectedAccounts.length>0&&<div style={{marginTop:10,background:"#090e14",border:"1px solid #141c26",borderRadius:7,padding:"10px 14px",fontSize:12,color:"#4a5568"}}>{importPreview.length} trades → <span style={{color:"#fbbf24",fontWeight:500}}>{importSelectedAccounts.length} account{importSelectedAccounts.length>1?"s":""}</span></div>}
+                {importSelectedAccounts.length>0&&<div style={{marginTop:10,background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7,padding:"10px 14px",fontSize:12,color:"#4a5568"}}>{importPreview.length} trades → <span style={{color:"#fbbf24",fontWeight:500}}>{importSelectedAccounts.length} account{importSelectedAccounts.length>1?"s":""}</span></div>}
               </div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:20}}>
