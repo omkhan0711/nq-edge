@@ -798,11 +798,14 @@ export default function App() {
                     <div className="section-title" style={{marginBottom:14}}>Accounts</div>
                     {accountStats.filter(a=>!a.dormant).map(a=>(
                       <div key={a.id} style={{marginBottom:14,paddingBottom:14,borderBottom:"1px solid #0f161e"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                          <div style={{fontSize:13,color:"#94a3b8",fontWeight:500}}>{a.name}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <div>
+                            <div style={{fontSize:13,color:"#94a3b8",fontWeight:500,marginBottom:2}}>{a.name}</div>
+                            <div style={{fontSize:10,color:"#475569"}}>{a.firm}</div>
+                          </div>
                           <div style={{textAlign:"right"}}>
-                            <div className="mono" style={{fontSize:14,fontWeight:500,color:a.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(a.pnl)}</div>
-                            <div style={{fontSize:10,color:a.gainPct>=0?"#4ade80":"#f87171"}}>{a.gainPct>=0?"+":""}{a.gainPct.toFixed(2)}%</div>
+                            <div className="mono" style={{fontSize:14,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
+                            <div style={{fontSize:10,color:a.currentBalancePct>=0?"#4ade80":"#f87171",marginTop:1}}>{a.currentBalancePct>=0?"+":""}{a.currentBalancePct.toFixed(2)}%</div>
                           </div>
                         </div>
                       </div>
