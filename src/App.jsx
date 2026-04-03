@@ -243,6 +243,7 @@ export default function App() {
   const [galleryFilter, setGalleryFilter] = useState({ outcome:"All", confluence:"All" });
   const [editingTransaction, setEditingTransaction] = useState(null); // holds tx being edited
   const [expandedScreenshot, setExpandedScreenshot] = useState(null);
+  const [hideValues, setHideValues] = useStorage("nq_hide_values",false);
   const [balanceAdjustments, setBalanceAdjustments] = useStorage("nq_balance_adjustments_v1",[]);
   const [adjustmentForm, setAdjustmentForm] = useState(EMPTY_ADJUSTMENT);
   const [showAdjustmentForm, setShowAdjustmentForm] = useState(null); // accountId or null
@@ -620,7 +621,7 @@ export default function App() {
   const lbl={display:"block",color:"#64748b",fontSize:11,marginBottom:7,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",fontWeight:600};
 
   return (
-    <div style={{fontFamily:"'DM Sans','Inter',sans-serif",background:"transparent",minHeight:"100vh",color:"#e2e8f0",width:"100%"}}>
+    <div className={hideValues?"hide-values":""} style={{fontFamily:"'DM Sans','Inter',sans-serif",background:"transparent",minHeight:"100vh",color:"#e2e8f0",width:"100%"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
@@ -658,6 +659,8 @@ export default function App() {
         .stat-card:hover{border-color:rgba(14,165,233,0.12);box-shadow:0 4px 20px rgba(0,0,0,0.15)}
 
         .mono{font-family:'DM Mono',monospace}
+        .hide-values .mono{filter:blur(7px);user-select:none;transition:filter 0.2s ease}
+        .hide-values .mono:hover{filter:blur(0px)}
 
         .analytics-nav-item{padding:10px 16px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.2s ease;margin-bottom:4px;font-family:'DM Sans',sans-serif}
         .analytics-nav-active{background:rgba(14,165,233,0.1);color:#e2e8f0}
@@ -703,6 +706,12 @@ export default function App() {
             ))}
           </div>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <button className="btn btn-ghost btn-sm" onClick={()=>setHideValues(v=>!v)} title={hideValues?"Show values":"Hide values"} style={{color:hideValues?"#f87171":"#64748b",borderColor:hideValues?"rgba(248,113,113,0.2)":"undefined"}}>
+              {hideValues
+                ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              }
+            </button>
             <button className="btn btn-ghost btn-sm" onClick={exportCSV}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
               Export
