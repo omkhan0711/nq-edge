@@ -17,7 +17,8 @@ for (let h=9;h<=10;h++) for (let m=0;m<60;m+=5) { if(h===10&&m>30)break; TIME_SL
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
+const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", biasCorrect:null, entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, planBreakReason:"", beSaved:null, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
+const PLAN_BREAK_REASONS = ["FOMO","Gambling","Revenge Trading","Over-Leveraging"];
 const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false, balanceAdjustment:"0" };
 const EMPTY_ADJUSTMENT = { amount:"", reason:"Data correction", date:new Date().toISOString().split("T")[0] };
 const EMPTY_TRANSACTION = { id:"", type:"challenge_fee", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"", accountStatus:"", firm:"" };
@@ -338,7 +339,25 @@ export default function App() {
     tradeList.forEach(t=>{const dow=DAYS_OF_WEEK[new Date(t.date+"T12:00:00").getDay()];if(dowMap[dow]){dowMap[dow].count++;dowMap[dow].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")dowMap[dow].wins++;if(t.outcome==="Loss")dowMap[dow].losses++;}});
     const mostActiveDay=Object.entries(dowMap).sort((a,b)=>b[1].count-a[1].count)[0];
     const bestWRDay=Object.entries(dowMap).filter(([,d])=>d.count>0).sort((a,b)=>{const awr=a[1].wins/(a[1].wins+a[1].losses||1);const bwr=b[1].wins/(b[1].wins+b[1].losses||1);return bwr-awr;})[0];
-    return{wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,maxDD,followedPlanRate,dayMap,streak,winStreak,greenDayStreak,rrDist,rrHitRate,confMap,timeMap,longs:longs.length,shorts:shorts.length,longWR,shortWR,avgDuration,avgWinDuration,avgLossDuration,rrVsPotential,avgLeft,ratingMap,bestDay,worstDay,mostActiveDay,bestWRDay,dowMap};
+    // Points (entry->exit per direction)
+    const tradesWithPoints=tradeList.filter(t=>t.entry&&t.exit);
+    const calcPoints=t=>{const pts=(parseFloat(t.exit)-parseFloat(t.entry))*(t.bias==="Bearish"?-1:1);return pts;};
+    const avgPoints=tradesWithPoints.length?tradesWithPoints.reduce((s,t)=>s+calcPoints(t),0)/tradesWithPoints.length:0;
+    const avgWinPoints=wins.filter(t=>t.entry&&t.exit).length?wins.filter(t=>t.entry&&t.exit).reduce((s,t)=>s+calcPoints(t),0)/wins.filter(t=>t.entry&&t.exit).length:0;
+    const avgLossPoints=losses.filter(t=>t.entry&&t.exit).length?losses.filter(t=>t.entry&&t.exit).reduce((s,t)=>s+calcPoints(t),0)/losses.filter(t=>t.entry&&t.exit).length:0;
+    const totalPoints=tradesWithPoints.reduce((s,t)=>s+calcPoints(t),0);
+    const pointsDist=tradesWithPoints.map(t=>({points:calcPoints(t),outcome:t.outcome,date:t.date}));
+    // Bias accuracy
+    const tradesWithBiasAnswer=tradeList.filter(t=>t.biasCorrect!==null&&t.biasCorrect!==undefined);
+    const biasCorrectRate=tradesWithBiasAnswer.length?(tradesWithBiasAnswer.filter(t=>t.biasCorrect).length/tradesWithBiasAnswer.length)*100:null;
+    // Plan break reasons
+    const planBreakMap={FOMO:0,Gambling:0,"Revenge Trading":0,"Over-Leveraging":0};
+    tradeList.filter(t=>!t.followedPlan&&t.planBreakReason).forEach(t=>{if(planBreakMap[t.planBreakReason]!==undefined)planBreakMap[t.planBreakReason]++;});
+    // Breakeven saved
+    const beTotal=tradeList.filter(t=>t.outcome==="Breakeven").length;
+    const beSavedCount=tradeList.filter(t=>t.outcome==="Breakeven"&&t.beSaved===true).length;
+    const beSavedRate=beTotal?(beSavedCount/beTotal)*100:null;
+    return{wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,maxDD,followedPlanRate,dayMap,streak,winStreak,greenDayStreak,rrDist,rrHitRate,confMap,timeMap,longs:longs.length,shorts:shorts.length,longWR,shortWR,avgDuration,avgWinDuration,avgLossDuration,rrVsPotential,avgLeft,ratingMap,bestDay,worstDay,mostActiveDay,bestWRDay,dowMap,avgPoints,avgWinPoints,avgLossPoints,totalPoints,pointsDist,biasCorrectRate,planBreakMap,beTotal,beSavedCount,beSavedRate};
   },[confluences]);
 
   const stats=useMemo(()=>{
@@ -590,6 +609,8 @@ export default function App() {
     {id:"time",label:"Time of Day"},
     {id:"summary",label:"Performance Summary"},
     {id:"metrics",label:"Key Metrics"},
+    {id:"points",label:"Points Analysis"},
+    {id:"mindset",label:"Mindset & Plan"},
     {id:"propfirm",label:"Prop Firm Stats"},
   ];
 
@@ -1266,6 +1287,90 @@ export default function App() {
                       ))}
                     </div>
                   )}
+                  {analyticsSection==="points"&&stats&&(
+                    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+                        {[
+                          ["Total Points",stats.totalPoints>=0?`+${stats.totalPoints.toFixed(2)}`:`${stats.totalPoints.toFixed(2)}`,stats.totalPoints>=0?"#4ade80":"#f87171"],
+                          ["Avg Points/Trade",stats.avgPoints>=0?`+${stats.avgPoints.toFixed(2)}`:`${stats.avgPoints.toFixed(2)}`,stats.avgPoints>=0?"#4ade80":"#f87171"],
+                          ["Avg Win Points",`+${stats.avgWinPoints.toFixed(2)}`,"#4ade80"],
+                          ["Avg Loss Points",`${stats.avgLossPoints.toFixed(2)}`,"#f87171"],
+                        ].map(([l,v,c])=>(
+                          <div key={l} className="card" style={{textAlign:"center"}}>
+                            <div className="section-title" style={{marginBottom:10}}>{l}</div>
+                            <div className="mono" style={{fontSize:24,fontWeight:600,color:c}}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="card">
+                        <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Points Distribution</div>
+                        <div style={{fontSize:12,color:"#4a5568",marginBottom:20}}>Points captured per trade (entry → exit)</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:360,overflowY:"auto"}}>
+                          {stats.pointsDist.sort((a,b)=>new Date(b.date)-new Date(a.date)).map((p,i)=>{
+                            const max=Math.max(...stats.pointsDist.map(x=>Math.abs(x.points)),1);
+                            const pct=Math.abs(p.points)/max*100;
+                            return(
+                              <div key={i} style={{display:"grid",gridTemplateColumns:"90px 1fr 80px 60px",gap:10,alignItems:"center",padding:"8px 12px",background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7}}>
+                                <div style={{fontSize:11,color:"#64748b"}}>{p.date}</div>
+                                <div className="bar-bg"><div style={{width:`${pct}%`,height:"100%",background:p.points>=0?"#4ade80":"#f87171",borderRadius:3}}/></div>
+                                <div className="mono" style={{fontSize:12,fontWeight:500,color:p.points>=0?"#4ade80":"#f87171",textAlign:"right"}}>{p.points>=0?"+":""}{p.points.toFixed(2)} pts</div>
+                                <div style={{fontSize:10,color:p.outcome==="Win"?"#4ade80":p.outcome==="Loss"?"#f87171":"#fbbf24",textAlign:"right",fontWeight:600}}>{p.outcome}</div>
+                              </div>
+                            );
+                          })}
+                          {!stats.pointsDist.length&&<div style={{textAlign:"center",padding:"40px 0",color:"#334155",fontSize:13}}>Log trades with entry and exit prices to see points data.</div>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {analyticsSection==="mindset"&&stats&&(
+                    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                        <div className="card">
+                          <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Bias Accuracy</div>
+                          <div style={{fontSize:12,color:"#4a5568",marginBottom:20}}>How often your pre-trade bias was correct</div>
+                          {stats.biasCorrectRate!==null?(
+                            <>
+                              <div className="mono" style={{fontSize:40,fontWeight:600,color:stats.biasCorrectRate>=60?"#4ade80":"#f87171",marginBottom:8}}>{stats.biasCorrectRate.toFixed(1)}%</div>
+                              <div className="bar-bg" style={{height:6,marginBottom:8}}><div style={{width:`${stats.biasCorrectRate}%`,height:"100%",background:stats.biasCorrectRate>=60?"#4ade80":"#f87171",borderRadius:3}}/></div>
+                              <div style={{fontSize:11,color:"#64748b"}}>Based on trades where you answered the bias question</div>
+                            </>
+                          ):<div style={{fontSize:13,color:"#334155",padding:"20px 0"}}>No bias data yet — check "Bias was correct" when logging trades.</div>}
+                        </div>
+                        <div className="card">
+                          <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Break-Even Saved Me</div>
+                          <div style={{fontSize:12,color:"#4a5568",marginBottom:20}}>Of your {stats.beTotal} break-even trades, how many saved you</div>
+                          {stats.beSavedRate!==null?(
+                            <>
+                              <div className="mono" style={{fontSize:40,fontWeight:600,color:"#fbbf24",marginBottom:8}}>{stats.beSavedRate.toFixed(1)}%</div>
+                              <div className="bar-bg" style={{height:6,marginBottom:8}}><div style={{width:`${stats.beSavedRate}%`,height:"100%",background:"#fbbf24",borderRadius:3}}/></div>
+                              <div style={{fontSize:11,color:"#64748b"}}>{stats.beSavedCount} of {stats.beTotal} break-even trades were saves</div>
+                            </>
+                          ):<div style={{fontSize:13,color:"#334155",padding:"20px 0"}}>No break-even save data yet — answer the BE question when logging.</div>}
+                        </div>
+                      </div>
+                      <div className="card">
+                        <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Plan Breaks — Why?</div>
+                        <div style={{fontSize:12,color:"#4a5568",marginBottom:20}}>Breakdown of why you didn't follow your trading plan</div>
+                        {Object.values(stats.planBreakMap).some(v=>v>0)?(
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+                            {Object.entries(stats.planBreakMap).map(([reason,count])=>{
+                              const total=Object.values(stats.planBreakMap).reduce((s,v)=>s+v,0);
+                              const pct=total?((count/total)*100):0;
+                              return(
+                                <div key={reason} style={{background:"rgba(251,191,36,0.05)",border:"1px solid rgba(251,191,36,0.12)",borderRadius:10,padding:"16px 14px",textAlign:"center"}}>
+                                  <div className="section-title" style={{marginBottom:8,color:"#92400e"}}>{reason}</div>
+                                  <div className="mono" style={{fontSize:28,fontWeight:600,color:"#fbbf24",marginBottom:4}}>{count}</div>
+                                  <div style={{fontSize:11,color:"#78350f"}}>{pct.toFixed(0)}% of breaks</div>
+                                  <div className="bar-bg" style={{marginTop:8,height:3}}><div style={{width:`${pct}%`,height:"100%",background:"#fbbf24",borderRadius:3}}/></div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ):<div style={{textAlign:"center",padding:"40px 0",color:"#334155",fontSize:13}}>No plan breaks recorded yet — keep following the plan! 🎯</div>}
+                      </div>
+                    </div>
+                  )}
                   {analyticsSection==="propfirm"&&(
                     <div style={{display:"flex",flexDirection:"column",gap:12}}>
                       {/* Top summary cards */}
@@ -1708,7 +1813,15 @@ export default function App() {
               <div><label style={lbl}>R:R Achieved <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>auto-filled</span></label><input type="number" value={form.rr} onChange={e=>sf("rr",e.target.value)} style={inp} placeholder="auto"/></div>
               <div><label style={lbl}>Max Potential R:R</label><input type="number" value={form.maxPotentialRR} onChange={e=>sf("maxPotentialRR",e.target.value)} style={inp} placeholder="e.g. 3"/></div>
               <div><label style={lbl}>Outcome <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>auto-set</span></label><Select value={form.outcome} onChange={e=>sf("outcome",e.target.value)} options={OUTCOMES}/></div>
-              {[["Bias","bias",BIASES],["Emotion","emotion",EMOTIONS]].map(([l,k,opts])=>(
+              <div>
+                <label style={lbl}>Bias</label>
+                <Select value={form.bias} onChange={e=>sf("bias",e.target.value)} options={BIASES}/>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8}}>
+                  <input type="checkbox" id="bc" checked={form.biasCorrect===true} onChange={e=>sf("biasCorrect",e.target.checked?true:false)} style={{accentColor:"#0ea5e9",width:13,height:13,cursor:"pointer"}}/>
+                  <label htmlFor="bc" style={{fontSize:11,color:"#64748b",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Bias was correct</label>
+                </div>
+              </div>
+              {[["Emotion","emotion",EMOTIONS]].map(([l,k,opts])=>(
                 <div key={k}><label style={lbl}>{l}</label><Select value={form[k]} onChange={e=>sf(k,e.target.value)} options={opts}/></div>
               ))}
             </div>
@@ -1724,9 +1837,31 @@ export default function App() {
             <div style={{marginTop:14}}><label style={lbl}>Notes</label><textarea value={form.notes} onChange={e=>sf("notes",e.target.value)} style={{...inp,minHeight:70,resize:"vertical",lineHeight:1.6}} placeholder="IFVG formed during NY open, entered on retest..."/></div>
 
             <div style={{marginTop:12,display:"flex",alignItems:"center",gap:10}}>
-              <input type="checkbox" id="fp" checked={form.followedPlan} onChange={e=>sf("followedPlan",e.target.checked)} style={{accentColor:"#3b82f6",width:14,height:14,cursor:"pointer"}}/>
+              <input type="checkbox" id="fp" checked={form.followedPlan} onChange={e=>sf("followedPlan",e.target.checked)} style={{accentColor:"#0ea5e9",width:14,height:14,cursor:"pointer"}}/>
               <label htmlFor="fp" style={{fontSize:12,color:"#4a5568",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Followed trading plan</label>
             </div>
+            {!form.followedPlan&&(
+              <div style={{marginTop:8,marginLeft:24,display:"flex",alignItems:"center",gap:10}}>
+                <label style={{fontSize:11,color:"#64748b",fontFamily:"'DM Sans',sans-serif",fontWeight:500,whiteSpace:"nowrap"}}>Why not?</label>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {PLAN_BREAK_REASONS.map(r=>(
+                    <button key={r} onClick={()=>sf("planBreakReason",form.planBreakReason===r?"":r)}
+                      style={{padding:"4px 12px",borderRadius:20,fontSize:11,fontWeight:500,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",border:"1px solid",
+                        background:form.planBreakReason===r?"rgba(251,191,36,0.12)":"transparent",
+                        color:form.planBreakReason===r?"#fbbf24":"#64748b",
+                        borderColor:form.planBreakReason===r?"rgba(251,191,36,0.35)":"rgba(148,163,184,0.1)"}}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {form.outcome==="Breakeven"&&(
+              <div style={{marginTop:10,display:"flex",alignItems:"center",gap:10}}>
+                <input type="checkbox" id="bes" checked={form.beSaved===true} onChange={e=>sf("beSaved",e.target.checked)} style={{accentColor:"#fbbf24",width:14,height:14,cursor:"pointer"}}/>
+                <label htmlFor="bes" style={{fontSize:12,color:"#fbbf24",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Did the break-even save me?</label>
+              </div>
+            )}
 
             <div style={{marginTop:10,display:"flex",alignItems:"center",gap:10}}>
               <input type="checkbox" id="efa" checked={form.excludeFromAnalytics||false} onChange={e=>sf("excludeFromAnalytics",e.target.checked)} style={{accentColor:"#f87171",width:14,height:14,cursor:"pointer"}}/>
