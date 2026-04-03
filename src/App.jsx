@@ -882,9 +882,7 @@ export default function App() {
                           <div style={{fontSize:12,color:"#4a5568"}}>{a.firm} · <span style={{color:"#93c5fd"}}>{a.phase}</span></div>
                         </div>
                         <div style={{textAlign:"right"}}>
-                          <div className="mono" style={{fontSize:18,fontWeight:500,color:a.pnl>=0?"#4ade80":"#f87171"}}>{fmt$(a.pnl)}</div>
-                          <div style={{fontSize:11,color:a.gainPct>=0?"#4ade80":"#f87171"}}>{a.gainPct>=0?"+":""}{a.gainPct.toFixed(2)}%</div>
-                          <div style={{fontSize:11,color:"#334155"}}>Bal: <span className="mono" style={{color:"#94a3b8"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span>{a.balAdj!==0&&<span style={{fontSize:10,color:a.balAdj>0?"#4ade80":"#f87171",marginLeft:4}}>({a.balAdj>0?"+":""}{fmt$(a.balAdj)} adj)</span>}</div>
+                          <div className="mono" style={{fontSize:20,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
@@ -905,42 +903,6 @@ export default function App() {
                             </div>
                           ))}
                         </div>
-                      </div>
-                      <div style={{background:"#090e14",border:"1px solid #141c26",borderRadius:7,padding:"10px 14px",marginBottom:14}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:a.adjustments?.length||showAdjustmentForm===a.id?8:0}}>
-                          <div className="section-title">Manual Adjustments {a.balAdj!==0&&<span style={{fontSize:10,color:a.balAdj>0?"#4ade80":"#f87171",marginLeft:6}}>({a.balAdj>0?"+":""}{fmt$(a.balAdj)})</span>}</div>
-                          <button onClick={()=>setShowAdjustmentForm(showAdjustmentForm===a.id?null:a.id)} className="btn btn-ghost" style={{fontSize:10,padding:"3px 8px"}}>{showAdjustmentForm===a.id?"Cancel":"+ Add"}</button>
-                        </div>
-                        {showAdjustmentForm===a.id&&(
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,marginBottom:8,alignItems:"end"}}>
-                            <div>
-                              <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Amount ($)</div>
-                              <input type="number" value={adjustmentForm.amount} onChange={e=>setAdjustmentForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",background:"#0b1118",border:"1px solid #1e2730",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="+500 or -200"/>
-                            </div>
-                            <div>
-                              <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Reason</div>
-                              <input value={adjustmentForm.reason} onChange={e=>setAdjustmentForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",background:"#0b1118",border:"1px solid #1e2730",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="e.g. Data correction"/>
-                            </div>
-                            <button onClick={()=>submitAdjustment(a.id)} className="btn btn-primary" style={{fontSize:11,padding:"7px 14px"}}>Submit</button>
-                          </div>
-                        )}
-                        {a.adjustments?.length>0&&(
-                          <div style={{maxHeight:150,overflowY:"auto"}}>
-                            {a.adjustments.sort((x,y)=>y.id-x.id).map(adj=>(
-                              <div key={adj.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #141c26",fontSize:11}}>
-                                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                                  <span className="mono" style={{color:parseFloat(adj.amount)>=0?"#4ade80":"#f87171",fontWeight:500}}>{parseFloat(adj.amount)>=0?"+":""}{fmt$(parseFloat(adj.amount))}</span>
-                                  <span style={{color:"#4a5568"}}>{adj.reason||"No reason"}</span>
-                                </div>
-                                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                                  <span style={{color:"#334155",fontSize:10}}>{adj.date}</span>
-                                  <button onClick={()=>deleteAdjustment(adj.id)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:12,padding:"0 2px"}}>✕</button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {!a.adjustments?.length&&showAdjustmentForm!==a.id&&<div style={{fontSize:11,color:"#334155",textAlign:"center",padding:"4px 0"}}>No adjustments yet</div>}
                       </div>
                       {a.notes&&<div style={{fontSize:12,color:"#4a5568",borderLeft:"2px solid #1e2730",paddingLeft:10,marginBottom:14,fontStyle:"italic",lineHeight:1.5}}>{a.notes}</div>}
                       <div style={{display:"flex",gap:6}}>
@@ -1624,7 +1586,41 @@ export default function App() {
               <div><label style={lbl}>Phase</label><Select value={accountForm.phase} onChange={e=>saf("phase",e.target.value)} options={["Phase 1","Phase 2","Funded","Verification"]}/></div>
               <div><label style={lbl}>Account Size ($)</label><input type="number" value={accountForm.size} onChange={e=>saf("size",e.target.value)} style={inp} placeholder="50000"/></div>
               <div><label style={lbl}>Starting Balance ($)</label><input type="number" value={accountForm.startingBalance} onChange={e=>saf("startingBalance",e.target.value)} style={inp} placeholder="50000"/></div>
-              <div style={{gridColumn:"1/-1",background:"rgba(148,163,184,0.04)",border:"1px solid #1e2730",borderRadius:7,padding:"10px 14px"}}><div style={{fontSize:11,color:"#4a5568"}}>Manual balance adjustments are now managed from each account card — use the "+ Add" button in the Manual Adjustments section.</div></div>
+              <div style={{gridColumn:"1/-1",background:"rgba(148,163,184,0.04)",border:"1px solid #1e2730",borderRadius:7,padding:"14px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <label style={lbl}>Manual Balance Adjustments</label>
+                  <button onClick={()=>setShowAdjustmentForm(showAdjustmentForm===accountForm.id?null:accountForm.id)} className="btn btn-ghost" style={{fontSize:10,padding:"3px 8px"}}>{showAdjustmentForm===accountForm.id?"Cancel":"+ Add"}</button>
+                </div>
+                {showAdjustmentForm===accountForm.id&&(
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,marginBottom:10,alignItems:"end"}}>
+                    <div>
+                      <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Amount ($)</div>
+                      <input type="number" value={adjustmentForm.amount} onChange={e=>setAdjustmentForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",background:"#0b1118",border:"1px solid #1e2730",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="+500 or -200"/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Reason</div>
+                      <input value={adjustmentForm.reason} onChange={e=>setAdjustmentForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",background:"#0b1118",border:"1px solid #1e2730",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="e.g. Data correction"/>
+                    </div>
+                    <button onClick={()=>submitAdjustment(accountForm.id)} className="btn btn-primary" style={{fontSize:11,padding:"7px 14px"}}>Submit</button>
+                  </div>
+                )}
+                {(()=>{const adjs=balanceAdjustments.filter(a=>a.accountId===accountForm.id);return adjs.length>0?(
+                  <div style={{maxHeight:150,overflowY:"auto"}}>
+                    {adjs.sort((x,y)=>y.id-x.id).map(adj=>(
+                      <div key={adj.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #141c26",fontSize:11}}>
+                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                          <span className="mono" style={{color:parseFloat(adj.amount)>=0?"#4ade80":"#f87171",fontWeight:500}}>{parseFloat(adj.amount)>=0?"+":""}{fmt$(parseFloat(adj.amount))}</span>
+                          <span style={{color:"#4a5568"}}>{adj.reason||"No reason"}</span>
+                        </div>
+                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                          <span style={{color:"#334155",fontSize:10}}>{adj.date}</span>
+                          <button onClick={()=>deleteAdjustment(adj.id)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:12,padding:"0 2px"}}>✕</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ):<div style={{fontSize:11,color:"#334155",textAlign:"center",padding:"4px 0"}}>No adjustments yet</div>;})()}
+              </div>
               <div style={{gridColumn:"1/-1"}}><label style={lbl}>Notes</label><input value={accountForm.notes} onChange={e=>saf("notes",e.target.value)} style={inp} placeholder="Any notes..."/></div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:24}}>
