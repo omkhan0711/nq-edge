@@ -388,7 +388,8 @@ export default function App() {
     const currentBalanceAdj=startBal+pnl+balAdj-totalPayouts;
     const totalProfit=pnl+balAdj;
     const totalProfitPct=(totalProfit/startBal)*100;
-    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj,adjustments:accAdjs,totalProfit,totalProfitPct};
+    const currentBalancePct=((currentBalanceAdj-startBal)/startBal)*100;
+    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj,adjustments:accAdjs,totalProfit,totalProfitPct,currentBalancePct};
   }),[accounts,trades,transactions,balanceAdjustments,computeStats]);
 
   const equityPath=useMemo(()=>{
@@ -913,7 +914,7 @@ export default function App() {
                         </div>
                         <div style={{textAlign:"right"}}>
                           <div className="mono" style={{fontSize:20,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
-                          <div style={{fontSize:11,color:a.totalProfitPct>=0?"#4ade80":"#f87171",marginTop:2}}>{a.totalProfitPct>=0?"+":""}{a.totalProfitPct.toFixed(2)}%</div>
+                          <div style={{fontSize:11,color:a.currentBalancePct>=0?"#4ade80":"#f87171",marginTop:2}}>{a.currentBalancePct>=0?"+":""}{a.currentBalancePct.toFixed(2)}%</div>
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
@@ -1271,7 +1272,7 @@ export default function App() {
                       <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:20}}>Key Metrics</div>
                       {[
                         ["Total Trades",stats.total,"#e2e8f0"],["Wins",stats.wins,"#4ade80"],["Losses",stats.losses,"#f87171"],
-                        ["Breakeven",stats.total-stats.wins-stats.losses,"#fbbf24"],["Win Rate",`${stats.winRate.toFixed(1)}%`,stats.winRate>=50?"#4ade80":"#f87171"],
+                        ["Breakeven",stats.total-stats.wins-stats.losses,"#fbbf24"],["Win Rate",`${stats.winRate.toFixed(1)}%`,stats.winRate>=50?"#4ade80":"#f87171"],["Strike Rate",`${stats.total?((stats.wins+(stats.total-stats.wins-stats.losses))/stats.total*100).toFixed(1):0}%`,(stats.total&&((stats.wins+(stats.total-stats.wins-stats.losses))/stats.total*100)>=50)?"#4ade80":"#f87171"],
                         ["Avg Win",fmt$(stats.avgWin),"#4ade80"],["Avg Loss",fmt$(stats.avgLoss),"#f87171"],
                         ["Profit Factor",stats.profitFactor===999?"∞":stats.profitFactor.toFixed(2),stats.profitFactor>=1.5?"#4ade80":"#f87171"],
                         ["Avg R:R",`${stats.avgRR.toFixed(2)}R`,stats.avgRR>=1.5?"#4ade80":"#64748b"],["Max Drawdown",fmt$(stats.maxDD),"#f87171"],
