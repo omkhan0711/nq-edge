@@ -19,7 +19,7 @@ const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday
 
 const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
 const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false, balanceAdjustment:"0" };
-const EMPTY_ADJUSTMENT = { amount:"", reason:"", date:new Date().toISOString().split("T")[0] };
+const EMPTY_ADJUSTMENT = { amount:"", reason:"Data correction", date:new Date().toISOString().split("T")[0] };
 const EMPTY_TRANSACTION = { id:"", type:"challenge_fee", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"", accountStatus:"", firm:"" };
 const TX_TYPES = [
   { value:"challenge_fee", label:"Challenge Fee" },
