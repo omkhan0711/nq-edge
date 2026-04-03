@@ -774,6 +774,41 @@ export default function App() {
                   ))}
                 </div>
 
+                {/* Portfolio Summary */}
+                {(()=>{
+                  const activeAccs=accountStats.filter(a=>!a.dormant);
+                  const totalCapital=activeAccs.reduce((s,a)=>s+a.startBal,0);
+                  const totalProfit=activeAccs.reduce((s,a)=>s+a.totalProfit,0);
+                  const totalCurrentBal=activeAccs.reduce((s,a)=>s+a.currentBalance,0);
+                  const totalPct=totalCapital?(( totalCurrentBal-totalCapital)/totalCapital)*100:0;
+                  return activeAccs.length>0&&(
+                    <div className="card" style={{marginBottom:20,background:"rgba(14,165,233,0.04)",border:"1px solid rgba(14,165,233,0.1)"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:0,divideX:"1px solid rgba(148,163,184,0.06)"}}>
+                        <div style={{padding:"4px 24px 4px 0",borderRight:"1px solid rgba(148,163,184,0.08)"}}>
+                          <div style={{fontSize:10,color:"#475569",letterSpacing:"0.07em",textTransform:"uppercase",fontWeight:600,marginBottom:6}}>Active Accounts</div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                            {activeAccs.map(a=>(
+                              <span key={a.id} style={{fontSize:11,color:"#7dd3fc",background:"rgba(14,165,233,0.08)",border:"1px solid rgba(14,165,233,0.12)",borderRadius:6,padding:"3px 9px",fontWeight:500}}>{a.name}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <div style={{padding:"4px 24px",borderRight:"1px solid rgba(148,163,184,0.08)"}}>
+                          <div style={{fontSize:10,color:"#475569",letterSpacing:"0.07em",textTransform:"uppercase",fontWeight:600,marginBottom:6}}>Total Capital Traded</div>
+                          <div className="mono" style={{fontSize:22,fontWeight:600,color:"#e2e8f0"}}>${totalCapital.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+                        </div>
+                        <div style={{padding:"4px 24px",borderRight:"1px solid rgba(148,163,184,0.08)"}}>
+                          <div style={{fontSize:10,color:"#475569",letterSpacing:"0.07em",textTransform:"uppercase",fontWeight:600,marginBottom:6}}>Total Profit</div>
+                          <div className="mono" style={{fontSize:22,fontWeight:600,color:totalProfit>=0?"#4ade80":"#f87171"}}>{totalProfit>=0?"+":""}{fmt$(totalProfit)}</div>
+                        </div>
+                        <div style={{padding:"4px 0 4px 24px"}}>
+                          <div style={{fontSize:10,color:"#475569",letterSpacing:"0.07em",textTransform:"uppercase",fontWeight:600,marginBottom:6}}>Overall % Gain</div>
+                          <div className="mono" style={{fontSize:22,fontWeight:600,color:totalPct>=0?"#4ade80":"#f87171"}}>{totalPct>=0?"+":""}{totalPct.toFixed(2)}%</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Equity + Accounts */}
                 <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:16,marginBottom:20}}>
                   <div className="card">
