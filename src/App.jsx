@@ -890,6 +890,7 @@ export default function App() {
                         </div>
                         <div style={{textAlign:"right"}}>
                           <div className="mono" style={{fontSize:20,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
+                          <div style={{fontSize:11,color:a.totalProfitPct>=0?"#4ade80":"#f87171",marginTop:2}}>{a.totalProfitPct>=0?"+":""}{a.totalProfitPct.toFixed(2)}%</div>
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
