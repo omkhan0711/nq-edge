@@ -287,6 +287,10 @@ export default function App() {
     const followedPlanRate=tradeList.filter(t=>t.followedPlan).length/tradeList.length*100;
     const revSorted=[...sorted].reverse(); let streak=0;
     for(let i=0;i<revSorted.length;i++){const t=revSorted[i];if(i===0){streak=t.outcome==="Win"?1:t.outcome==="Loss"?-1:0;}else{if(t.outcome==="Win"&&streak>0)streak++;else if(t.outcome==="Loss"&&streak<0)streak--;else break;}}
+    const winStreak=streak>0?streak:0;
+    const sortedDays=Object.entries(dayMap).sort((a,b)=>b[0].localeCompare(a[0]));
+    let greenDayStreak=0;
+    for(const [,d] of sortedDays){if(d.pnl>0)greenDayStreak++;else break;}
     const rrDist={};
     RR_BUCKETS.forEach(b=>rrDist[b]={count:0,wins:0,losses:0});
     tradeList.filter(t=>t.rr).forEach(t=>{
@@ -334,7 +338,7 @@ export default function App() {
     tradeList.forEach(t=>{const dow=DAYS_OF_WEEK[new Date(t.date+"T12:00:00").getDay()];if(dowMap[dow]){dowMap[dow].count++;dowMap[dow].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")dowMap[dow].wins++;if(t.outcome==="Loss")dowMap[dow].losses++;}});
     const mostActiveDay=Object.entries(dowMap).sort((a,b)=>b[1].count-a[1].count)[0];
     const bestWRDay=Object.entries(dowMap).filter(([,d])=>d.count>0).sort((a,b)=>{const awr=a[1].wins/(a[1].wins+a[1].losses||1);const bwr=b[1].wins/(b[1].wins+b[1].losses||1);return bwr-awr;})[0];
-    return{wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,maxDD,followedPlanRate,dayMap,streak,rrDist,rrHitRate,confMap,timeMap,longs:longs.length,shorts:shorts.length,longWR,shortWR,avgDuration,avgWinDuration,avgLossDuration,rrVsPotential,avgLeft,ratingMap,bestDay,worstDay,mostActiveDay,bestWRDay,dowMap};
+    return{wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,maxDD,followedPlanRate,dayMap,streak,winStreak,greenDayStreak,rrDist,rrHitRate,confMap,timeMap,longs:longs.length,shorts:shorts.length,longWR,shortWR,avgDuration,avgWinDuration,avgLossDuration,rrVsPotential,avgLeft,ratingMap,bestDay,worstDay,mostActiveDay,bestWRDay,dowMap};
   },[confluences]);
 
   const stats=useMemo(()=>{
@@ -362,8 +366,9 @@ export default function App() {
     const netReal=totalPayouts-totalExpenses;
     const accAdjs=balanceAdjustments.filter(a=>a.accountId===acc.id);
     const balAdj=accAdjs.reduce((s,a)=>s+(parseFloat(a.amount)||0),0);
-    const currentBalanceAdj=startBal+pnl+balAdj;
-    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj,adjustments:accAdjs};
+    const currentBalanceAdj=startBal+pnl+balAdj-totalPayouts;
+    const balPct=(currentBalanceAdj/startBal)*100;
+    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj,adjustments:accAdjs,balPct};
   }),[accounts,trades,transactions,balanceAdjustments,computeStats]);
 
   const equityPath=useMemo(()=>{
@@ -726,7 +731,7 @@ export default function App() {
             ):(
               <>
                 {/* Stats row */}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8,marginBottom:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:8,marginBottom:16}}>
                   {[
                     {l:"Total P&L",v:fmt$(activeStats?.totalPnl||0),c:(activeStats?.totalPnl||0)>=0?"#4ade80":"#f87171"},
                     {l:"Win Rate",v:`${(activeStats?.winRate||0).toFixed(1)}%`,c:(activeStats?.winRate||0)>=50?"#4ade80":"#f87171"},
@@ -734,7 +739,8 @@ export default function App() {
                     {l:"Avg R:R",v:`${(activeStats?.avgRR||0).toFixed(2)}R`,c:"#93c5fd"},
                     {l:"Trades",v:activeStats?.total||0,c:"#e2e8f0"},
                     {l:"Plan %",v:`${(activeStats?.followedPlanRate||0).toFixed(0)}%`,c:(activeStats?.followedPlanRate||0)>=70?"#4ade80":"#fbbf24"},
-                    {l:"Streak",v:(activeStats?.streak||0)>0?`+${activeStats.streak}W`:(activeStats?.streak||0)<0?`${Math.abs(activeStats.streak)}L`:"—",c:(activeStats?.streak||0)>0?"#4ade80":(activeStats?.streak||0)<0?"#f87171":"#4a5568"}
+                    {l:"Win Streak",v:(activeStats?.winStreak||0)>0?`${activeStats.winStreak}W`:"—",c:(activeStats?.winStreak||0)>0?"#4ade80":"#4a5568"},
+                    {l:"Green Days",v:(activeStats?.greenDayStreak||0)>0?`${activeStats.greenDayStreak}D`:"—",c:(activeStats?.greenDayStreak||0)>0?"#4ade80":"#4a5568"}
                   ].map(s=>(
                     <div key={s.l} className="stat-card">
                       <div style={{fontSize:10,color:"#334155",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600,marginBottom:8}}>{s.l}</div>
@@ -883,6 +889,11 @@ export default function App() {
                         </div>
                         <div style={{textAlign:"right"}}>
                           <div className="mono" style={{fontSize:20,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
+                          <div style={{fontSize:11,color:a.pnl>=0?"#4ade80":"#f87171",marginTop:2}}>{a.pnl>=0?"+":""}{fmt$(a.pnl)} profit</div>
+                          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:2}}>
+                            <span style={{fontSize:10,color:a.gainPct>=0?"#4ade80":"#f87171"}}>{a.gainPct>=0?"+":""}{a.gainPct.toFixed(2)}% gain</span>
+                            <span style={{fontSize:10,color:a.balPct>=100?"#4ade80":"#f87171"}}>{a.balPct.toFixed(1)}% bal</span>
+                          </div>
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
