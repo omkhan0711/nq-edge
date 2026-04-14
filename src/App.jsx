@@ -113,6 +113,49 @@ function FirmInput({ value, onChange, firms }) {
   );
 }
 
+function AccountFilterDropdown({ accounts, selectedIds, onChange, label }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef();
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  const toggle = id => onChange(selectedIds.includes(id) ? selectedIds.filter(x=>x!==id) : [...selectedIds, id]);
+  const displayLabel = selectedIds.length === 0 ? (label||"All Accounts") : selectedIds.length === 1 ? (accounts.find(a=>a.id===selectedIds[0])?.name||"1 account") : `${selectedIds.length} accounts`;
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <button onClick={()=>setOpen(p=>!p)} style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(15,23,35,0.5)", border:"1px solid rgba(148,163,184,0.08)", borderRadius:8, padding:"6px 12px", color:selectedIds.length>0?"#7dd3fc":"#94a3b8", fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer", transition:"all 0.2s", minWidth:130 }}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        <span style={{flex:1,textAlign:"left"}}>{displayLabel}</span>
+        <span style={{fontSize:9,color:"#4a5568",transform:open?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.15s"}}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 4px)", right:0, background:"#0c1220", border:"1px solid rgba(148,163,184,0.1)", borderRadius:10, padding:"6px 0", zIndex:100, minWidth:200, maxHeight:280, overflowY:"auto", boxShadow:"0 8px 24px rgba(0,0,0,0.4)" }}>
+          <div onClick={()=>{ onChange([]); }} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", cursor:"pointer", transition:"background 0.1s" }} onMouseEnter={e=>e.currentTarget.style.background="rgba(14,165,233,0.06)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <div style={{ width:14, height:14, borderRadius:3, border:`1.5px solid ${selectedIds.length===0?"#0ea5e9":"#334155"}`, background:selectedIds.length===0?"#0ea5e9":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              {selectedIds.length===0&&<svg width="8" height="8" viewBox="0 0 8 8"><polyline points="1,4 3,6 7,2" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </div>
+            <span style={{ fontSize:12, color:selectedIds.length===0?"#e2e8f0":"#6b7a8d" }}>All Accounts</span>
+          </div>
+          <div style={{ height:1, background:"rgba(148,163,184,0.06)", margin:"4px 0" }}/>
+          {accounts.map(a => (
+            <div key={a.id} onClick={()=>toggle(a.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", cursor:"pointer", transition:"background 0.1s" }} onMouseEnter={e=>e.currentTarget.style.background="rgba(14,165,233,0.06)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{ width:14, height:14, borderRadius:3, border:`1.5px solid ${selectedIds.includes(a.id)?"#0ea5e9":"#334155"}`, background:selectedIds.includes(a.id)?"#0ea5e9":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                {selectedIds.includes(a.id)&&<svg width="8" height="8" viewBox="0 0 8 8"><polyline points="1,4 3,6 7,2" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:selectedIds.includes(a.id)?"#e2e8f0":"#94a3b8" }}>{a.name}</div>
+                {a.firm&&<div style={{ fontSize:10, color:"#334155" }}>{a.firm}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConfluenceCheckboxes({ selected, onChange, confluences }) {
   const toggle = c => onChange(selected.includes(c) ? selected.filter(x=>x!==c) : [...selected,c]);
   return (
@@ -236,7 +279,7 @@ export default function App() {
   const [aiReviewLoading, setAiReviewLoading] = useState(false);
   const [screenshotPreview, setScreenshotPreview] = useState(null);
   const [toast, setToast] = useState(null);
-  const [selectedAccount, setSelectedAccount] = useState(null);
+  const [overviewSelectedAccounts, setOverviewSelectedAccounts] = useState([]);
   const [importPreview, setImportPreview] = useState(null);
   const [importFileName, setImportFileName] = useState("");
   const [importSelectedAccounts, setImportSelectedAccounts] = useState([]);
@@ -394,12 +437,12 @@ export default function App() {
   }),[accounts,trades,transactions,balanceAdjustments,computeStats]);
 
   const equityPath=useMemo(()=>{
-    const src=selectedAccount?(accountStats.find(a=>a.id===selectedAccount)?.stats?.equity||[]):(stats?.equity||[]);
+    const src=overviewSelectedAccounts.length>0?(()=>{const selected=accountStats.filter(a=>overviewSelectedAccounts.includes(a.id));if(selected.length===1)return selected[0]?.stats?.equity||[];const allDates=[...new Set(selected.flatMap(a=>(a.stats?.equity||[]).map(e=>e.date)))].sort();let running=0;return allDates.map(d=>{const dayPnl=selected.reduce((s,a)=>{const eq=a.stats?.equity||[];const pt=eq.find(e=>e.date===d);const prevPts=eq.filter(e=>e.date<d);const prev=prevPts.length?prevPts[prevPts.length-1]:null;return s+(pt?pt.value-(prev?prev.value:0):0);},0);running+=dayPnl;return{date:d,value:running};});})():(stats?.equity||[]);
     if(!src.length)return"";
     const vals=src.map(p=>p.value);
     const minV=Math.min(0,...vals),maxV=Math.max(0,...vals),range=maxV-minV||1;
     return src.map((p,i)=>{const x=(i/(src.length-1||1))*400;const y=80-((p.value-minV)/range)*80;return`${i===0?"M":"L"}${x},${y}`;}).join(" ");
-  },[stats,accountStats,selectedAccount]);
+  },[stats,accountStats,overviewSelectedAccounts]);
 
   const calDayMap=useMemo(()=>{
     const map={};
@@ -598,7 +641,12 @@ export default function App() {
   };
   const deleteAdjustment=(adjId)=>{setBalanceAdjustments(prev=>prev.filter(a=>a.id!==adjId));showToast("Adjustment removed","warn");};
 
-  const activeStats=selectedAccount?accountStats.find(a=>a.id===selectedAccount)?.stats:stats;
+  const activeStats=useMemo(()=>{
+    if(overviewSelectedAccounts.length===0)return stats;
+    if(overviewSelectedAccounts.length===1){const found=accountStats.find(a=>a.id===overviewSelectedAccounts[0]);return found?.stats||stats;}
+    const selectedTrades=trades.filter(t=>(t.accountIds||[]).some(id=>overviewSelectedAccounts.includes(id)));
+    return computeStats(selectedTrades);
+  },[overviewSelectedAccounts,accountStats,stats,trades,computeStats]);
   const ratingColor=r=>({"A+":"#4ade80","A":"#4ade80","A-":"#86efac","B+":"#f0b429","B":"#f0b429","B-":"#fcd34d","C":"#f87171"}[r]||"#e2e8f0");
 
   const ANALYTICS_SECTIONS=[
@@ -741,10 +789,7 @@ export default function App() {
                 <div className="page-title">Overview</div>
                 <div className="page-sub">{trades.length} trades · {activeAccounts.length} active accounts</div>
               </div>
-              <div style={{display:"flex",gap:4,background:"rgba(15,23,35,0.4)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8,padding:3}}>
-                <button className={`btn btn-sm ${!selectedAccount?"btn-ghost":"btn-ghost"}`} onClick={()=>setSelectedAccount(null)} style={{background:!selectedAccount?"#141c26":"transparent",color:!selectedAccount?"#e2e8f0":"#4a5568",border:"none"}}>All</button>
-                {activeAccounts.map(a=><button key={a.id} className="btn btn-sm" onClick={()=>setSelectedAccount(selectedAccount===a.id?null:a.id)} style={{background:selectedAccount===a.id?"#141c26":"transparent",color:selectedAccount===a.id?"#e2e8f0":"#4a5568",border:"none",fontSize:11}}>{a.name}</button>)}
-              </div>
+              <AccountFilterDropdown accounts={activeAccounts} selectedIds={overviewSelectedAccounts} onChange={setOverviewSelectedAccounts} />
             </div>
 
             {!trades.length?(
@@ -862,10 +907,7 @@ export default function App() {
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
                     <div className="section-title">P&L Calendar</div>
                     <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                      <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                        <button className="btn btn-sm" onClick={()=>setCalSelectedAccounts([])} style={{background:calSelectedAccounts.length===0?"#141c26":"transparent",color:calSelectedAccounts.length===0?"#e2e8f0":"#4a5568",border:"1px solid rgba(148,163,184,0.08)",fontSize:11}}>All</button>
-                        {activeAccounts.map(a=><button key={a.id} className="btn btn-sm" onClick={()=>setCalSelectedAccounts(prev=>prev.includes(a.id)?prev.filter(x=>x!==a.id):[...prev,a.id])} style={{background:calSelectedAccounts.includes(a.id)?"#141c26":"transparent",color:calSelectedAccounts.includes(a.id)?"#e2e8f0":"#4a5568",border:"1px solid rgba(148,163,184,0.08)",fontSize:11}}>{a.name}</button>)}
-                      </div>
+                      <AccountFilterDropdown accounts={activeAccounts} selectedIds={calSelectedAccounts} onChange={setCalSelectedAccounts} />
                       <div style={{display:"flex",gap:4,alignItems:"center",borderLeft:"1px solid #141c26",paddingLeft:12}}>
                         <button onClick={()=>setCalMonth(p=>{const d=new Date(p.y,p.m-1);return{y:d.getFullYear(),m:d.getMonth()};})} className="btn btn-ghost btn-sm">‹</button>
                         <span className="mono" style={{fontSize:13,fontWeight:500,color:"#94a3b8",minWidth:120,textAlign:"center"}}>{MONTHS[calMonth.m]} {calMonth.y}</span>
@@ -947,7 +989,7 @@ export default function App() {
               </div>
             ):(
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
-                {accountStats.filter(a=>showDormant||!a.dormant).map((a)=>{
+                {accountStats.filter(a=>showDormant||!a.dormant).sort((a,b)=>a.name.localeCompare(b.name)).map((a)=>{
                   const realIdx=accounts.findIndex(ac=>ac.id===a.id);
                   return(
                     <div key={a.id} className="card" style={{padding:22,opacity:a.dormant?0.55:1}}>
