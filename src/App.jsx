@@ -130,7 +130,7 @@ function AccountFilterDropdown({ accounts, selectedIds, onChange, label }) {
       <button onClick={()=>setOpen(p=>!p)} style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(15,23,35,0.5)", border:"1px solid rgba(148,163,184,0.08)", borderRadius:8, padding:"6px 12px", color:selectedIds.length>0?"#7dd3fc":"#94a3b8", fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer", transition:"all 0.2s", minWidth:130 }}>
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
         <span style={{flex:1,textAlign:"left"}}>{displayLabel}</span>
-        <span style={{fontSize:9,color:"#4a5568",transform:open?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.15s"}}>\u25be</span>
+        <span style={{fontSize:9,color:"#4a5568",transform:open?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.15s"}}>▾</span>
       </button>
       {open && (
         <div style={{ position:"absolute", top:"calc(100% + 4px)", right:0, background:"#0c1220", border:"1px solid rgba(148,163,184,0.1)", borderRadius:10, padding:"6px 0", zIndex:100, minWidth:200, maxHeight:280, overflowY:"auto", boxShadow:"0 8px 24px rgba(0,0,0,0.4)" }}>
@@ -1086,7 +1086,7 @@ export default function App() {
                         {t.asset&&<span style={{fontSize:11,color:"#7dd3fc",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",padding:"2px 8px",borderRadius:5}}>{t.asset}</span>}
                         <span style={{fontSize:12,fontWeight:500,color:t.bias==="Bullish"?"#4ade80":"#f87171"}}>{t.bias==="Bullish"?"↑":"↓"} {t.bias}</span>
                         {t.rating&&<span style={{fontSize:12,fontWeight:600,color:ratingColor(t.rating)}}>{t.rating}</span>}
-                        {accs.map(a=>{const m=(t.accountMultipliers&&t.accountMultipliers[a.id])||1;return <span key={a.id} style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",padding:"2px 8px",borderRadius:5}}>{a.name}{m>1&&<span style={{color:"#c084fc",fontWeight:600,marginLeft:3}}>{m}\u00d7</span>}</span>;})}
+                        {accs.map(a=>{const m=(t.accountMultipliers&&t.accountMultipliers[a.id])||1;return <span key={a.id} style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",padding:"2px 8px",borderRadius:5}}>{a.name}{m>1&&<span style={{color:"#c084fc",fontWeight:600,marginLeft:3}}>{m}×</span>}</span>;})}
                         {!t.followedPlan&&<span style={{fontSize:11,color:"#fbbf24"}}>⚠ Off-plan</span>}
                         {t.excludeFromAnalytics&&<span style={{fontSize:11,color:"#f87171",background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",padding:"2px 8px",borderRadius:5}}>Excluded</span>}
                       </div>
@@ -2053,14 +2053,14 @@ export default function App() {
                           </div>
                           <div style={{flex:1}}>
                             <div style={{fontSize:12,color:isSelected?"#e2e8f0":"#94a3b8",fontWeight:500}}>{a.name}</div>
-                            <div style={{fontSize:10,color:"#4a5568"}}>{a.firm} \u00b7 {a.phase}</div>
+                            <div style={{fontSize:10,color:"#4a5568"}}>{a.firm} · {a.phase}</div>
                           </div>
-                          {isSelected&&mult>1&&<span style={{fontSize:11,color:"#c084fc",fontWeight:600,background:"rgba(192,132,252,0.08)",border:"1px solid rgba(192,132,252,0.2)",padding:"1px 7px",borderRadius:5}}>{mult}\u00d7</span>}
+                          {isSelected&&mult>1&&<span style={{fontSize:11,color:"#c084fc",fontWeight:600,background:"rgba(192,132,252,0.08)",border:"1px solid rgba(192,132,252,0.2)",padding:"1px 7px",borderRadius:5}}>{mult}×</span>}
                         </div>
                         {isSelected&&(
                           <div style={{padding:"0 12px 10px",display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
                             {["1","2","3","4","5"].map(m=>(
-                              <button key={m} onClick={()=>setImportAccountMults(prev=>({...prev,[a.id]:parseInt(m)}))} style={{flex:1,padding:"5px 0",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",border:"1px solid",background:mult===parseInt(m)?"rgba(192,132,252,0.12)":"rgba(15,23,35,0.5)",color:mult===parseInt(m)?"#c084fc":"#4a5568",borderColor:mult===parseInt(m)?"rgba(192,132,252,0.3)":"rgba(148,163,184,0.08)",transition:"all 0.15s"}}>{m}\u00d7</button>
+                              <button key={m} onClick={()=>setImportAccountMults(prev=>({...prev,[a.id]:parseInt(m)}))} style={{flex:1,padding:"5px 0",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",border:"1px solid",background:mult===parseInt(m)?"rgba(192,132,252,0.12)":"rgba(15,23,35,0.5)",color:mult===parseInt(m)?"#c084fc":"#4a5568",borderColor:mult===parseInt(m)?"rgba(192,132,252,0.3)":"rgba(148,163,184,0.08)",transition:"all 0.15s"}}>{m}×</button>
                             ))}
                           </div>
                         )}
@@ -2069,14 +2069,14 @@ export default function App() {
                   })}
                   {(()=>{const sel=Object.entries(importAccountMults).filter(([,m])=>m>0);return sel.length>0&&(
                     <div style={{marginTop:10,background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7,padding:"10px 14px",fontSize:12,color:"#4a5568"}}>
-                      {importPreview.length} trades \u2192 {sel.map(([id,m])=>{const acc=activeAccounts.find(a=>a.id===id);return <span key={id} style={{color:m>1?"#c084fc":"#fbbf24",fontWeight:500}}>{acc?.name||"?"}{m>1?` @${m}\u00d7`:""} </span>;})}</div>
+                      {importPreview.length} trades → {sel.map(([id,m])=>{const acc=activeAccounts.find(a=>a.id===id);return <span key={id} style={{color:m>1?"#c084fc":"#fbbf24",fontWeight:500}}>{acc?.name||"?"}{m>1?` @${m}×`:""} </span>;})}</div>
                   );})()}
                 </>:<div style={{fontSize:12,color:"#4a5568",padding:"10px 12px",background:"rgba(15,23,35,0.4)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:6}}>No active accounts</div>}
               </div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:20}}>
               <button onClick={confirmTradovateImport} className="btn btn-success" style={{flex:1,padding:11,fontSize:13}} disabled={!Object.values(importAccountMults).some(m=>m>0)}>
-                Confirm Import \u2192 {Object.values(importAccountMults).filter(m=>m>0).length} account{Object.values(importAccountMults).filter(m=>m>0).length!==1?"s":""}
+                Confirm Import → {Object.values(importAccountMults).filter(m=>m>0).length} account{Object.values(importAccountMults).filter(m=>m>0).length!==1?"s":""}
               </button>
               <button onClick={()=>setShowImportModal(false)} className="btn btn-ghost" style={{padding:"11px 22px"}}>Cancel</button>
             </div>
