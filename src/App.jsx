@@ -17,7 +17,7 @@ for (let h=9;h<=10;h++) for (let m=0;m<60;m+=5) { if(h===10&&m>30)break; TIME_SL
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", biasCorrect:null, entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, planBreakReason:"", beSaved:null, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
+const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", biasCorrect:null, entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", pnlMultiplier:"1", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, planBreakReason:"", beSaved:null, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
 const PLAN_BREAK_REASONS = ["FOMO","Gambling","Revenge Trading","Over-Leveraging"];
 const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false, balanceAdjustment:"0" };
 const EMPTY_ADJUSTMENT = { amount:"", reason:"Data correction", date:new Date().toISOString().split("T")[0] };
@@ -47,6 +47,10 @@ async function callClaude(messages, systemPrompt) {
 function calcCommission(asset, contracts) {
   const rate = COMMISSIONS[asset] || 0.52;
   return rate * contracts * 2;
+}
+
+function effectivePnl(t) {
+  return (parseFloat(t.pnl)||0) * (parseFloat(t.pnlMultiplier)||1);
 }
 
 function timeDiffMinutes(t1, t2) {
@@ -122,6 +126,7 @@ function AccountFilterDropdown({ accounts, selectedIds, onChange, label }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
   const toggle = id => onChange(selectedIds.includes(id) ? selectedIds.filter(x=>x!==id) : [...selectedIds, id]);
+  const sortedAccounts = [...accounts].sort((a,b)=>a.name.localeCompare(b.name));
   const displayLabel = selectedIds.length === 0 ? (label||"All Accounts") : selectedIds.length === 1 ? (accounts.find(a=>a.id===selectedIds[0])?.name||"1 account") : `${selectedIds.length} accounts`;
   return (
     <div ref={ref} style={{ position:"relative" }}>
@@ -139,7 +144,7 @@ function AccountFilterDropdown({ accounts, selectedIds, onChange, label }) {
             <span style={{ fontSize:12, color:selectedIds.length===0?"#e2e8f0":"#6b7a8d" }}>All Accounts</span>
           </div>
           <div style={{ height:1, background:"rgba(148,163,184,0.06)", margin:"4px 0" }}/>
-          {accounts.map(a => (
+          {sortedAccounts.map(a => (
             <div key={a.id} onClick={()=>toggle(a.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", cursor:"pointer", transition:"background 0.1s" }} onMouseEnter={e=>e.currentTarget.style.background="rgba(14,165,233,0.06)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <div style={{ width:14, height:14, borderRadius:3, border:`1.5px solid ${selectedIds.includes(a.id)?"#0ea5e9":"#334155"}`, background:selectedIds.includes(a.id)?"#0ea5e9":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 {selectedIds.includes(a.id)&&<svg width="8" height="8" viewBox="0 0 8 8"><polyline points="1,4 3,6 7,2" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -283,6 +288,7 @@ export default function App() {
   const [importPreview, setImportPreview] = useState(null);
   const [importFileName, setImportFileName] = useState("");
   const [importSelectedAccounts, setImportSelectedAccounts] = useState([]);
+  const [importMultiplier, setImportMultiplier] = useState("1");
   const [galleryFilter, setGalleryFilter] = useState({ outcome:"All", confluence:"All" });
   const [editingTransaction, setEditingTransaction] = useState(null); // holds tx being edited
   const [expandedScreenshot, setExpandedScreenshot] = useState(null);
@@ -315,20 +321,20 @@ export default function App() {
     const wins=tradeList.filter(t=>t.outcome==="Win");
     const losses=tradeList.filter(t=>t.outcome==="Loss");
     const nonBE=tradeList.filter(t=>t.outcome!=="Breakeven");
-    const totalPnl=tradeList.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0);
+    const totalPnl=tradeList.reduce((s,t)=>s+effectivePnl(t),0);
     const winRate=nonBE.length?(wins.length/nonBE.length)*100:0;
-    const avgWin=wins.length?wins.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0)/wins.length:0;
-    const avgLoss=losses.length?losses.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0)/losses.length:0;
-    const totalWinPnl=wins.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0);
-    const totalLossPnl=Math.abs(losses.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0));
+    const avgWin=wins.length?wins.reduce((s,t)=>s+effectivePnl(t),0)/wins.length:0;
+    const avgLoss=losses.length?losses.reduce((s,t)=>s+effectivePnl(t),0)/losses.length:0;
+    const totalWinPnl=wins.reduce((s,t)=>s+effectivePnl(t),0);
+    const totalLossPnl=Math.abs(losses.reduce((s,t)=>s+effectivePnl(t),0));
     const profitFactor=totalLossPnl?totalWinPnl/totalLossPnl:wins.length?999:0;
     const winningWithRR=wins.filter(t=>t.rr);
     const avgRR=winningWithRR.reduce((s,t)=>s+(parseFloat(t.rr)||0),0)/(winningWithRR.length||1);
     const sorted=[...tradeList].sort((a,b)=>new Date(a.date)-new Date(b.date));
     let cum=0,peak=0,maxDD=0;
-    const equity=sorted.map(t=>{cum+=parseFloat(t.pnl)||0;if(cum>peak)peak=cum;const dd=peak-cum;if(dd>maxDD)maxDD=dd;return{date:t.date,value:cum};});
+    const equity=sorted.map(t=>{cum+=effectivePnl(t);if(cum>peak)peak=cum;const dd=peak-cum;if(dd>maxDD)maxDD=dd;return{date:t.date,value:cum};});
     const dayMap={};
-    tradeList.forEach(t=>{if(!dayMap[t.date])dayMap[t.date]={pnl:0,count:0,wins:0,losses:0};dayMap[t.date].pnl+=parseFloat(t.pnl)||0;dayMap[t.date].count++;if(t.outcome==="Win")dayMap[t.date].wins++;if(t.outcome==="Loss")dayMap[t.date].losses++;});
+    tradeList.forEach(t=>{if(!dayMap[t.date])dayMap[t.date]={pnl:0,count:0,wins:0,losses:0};dayMap[t.date].pnl+=effectivePnl(t);dayMap[t.date].count++;if(t.outcome==="Win")dayMap[t.date].wins++;if(t.outcome==="Loss")dayMap[t.date].losses++;});
     const followedPlanRate=tradeList.filter(t=>t.followedPlan).length/tradeList.length*100;
     const revSorted=[...sorted].reverse(); let streak=0;
     for(let i=0;i<revSorted.length;i++){const t=revSorted[i];if(i===0){streak=t.outcome==="Win"?1:t.outcome==="Loss"?-1:0;}else{if(t.outcome==="Win"&&streak>0)streak++;else if(t.outcome==="Loss"&&streak<0)streak--;else break;}}
@@ -351,14 +357,14 @@ export default function App() {
     });
     const confMap={};
     confluences.forEach(c=>confMap[c]={count:0,wins:0,losses:0,pnl:0});
-    tradeList.forEach(t=>{(t.confluences||[]).forEach(c=>{if(confMap[c]){confMap[c].count++;confMap[c].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")confMap[c].wins++;if(t.outcome==="Loss")confMap[c].losses++;}});});
+    tradeList.forEach(t=>{(t.confluences||[]).forEach(c=>{if(confMap[c]){confMap[c].count++;confMap[c].pnl+=effectivePnl(t);if(t.outcome==="Win")confMap[c].wins++;if(t.outcome==="Loss")confMap[c].losses++;}});});
     const timeMap={};
     TIME_SLOTS.forEach(s=>timeMap[s]={count:0,wins:0,losses:0,pnl:0});
     tradeList.forEach(t=>{
       if(!t.time)return;
       const [th,tm]=t.time.split(":").map(Number);
       const slot=`${String(th).padStart(2,"0")}:${String(Math.floor(tm/5)*5).padStart(2,"0")}`;
-      if(timeMap[slot]){timeMap[slot].count++;timeMap[slot].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")timeMap[slot].wins++;if(t.outcome==="Loss")timeMap[slot].losses++;}
+      if(timeMap[slot]){timeMap[slot].count++;timeMap[slot].pnl+=effectivePnl(t);if(t.outcome==="Win")timeMap[slot].wins++;if(t.outcome==="Loss")timeMap[slot].losses++;}
     });
     const longs=tradeList.filter(t=>t.bias==="Bullish");
     const shorts=tradeList.filter(t=>t.bias==="Bearish");
@@ -374,13 +380,13 @@ export default function App() {
     const avgLeft=rrVsPotential.length?rrVsPotential.reduce((s,t)=>s+t.left,0)/rrVsPotential.length:0;
     const ratingMap={};
     TRADE_RATINGS.forEach(r=>ratingMap[r]={count:0,wins:0,losses:0,pnl:0});
-    tradeList.forEach(t=>{if(t.rating&&ratingMap[t.rating]){ratingMap[t.rating].count++;ratingMap[t.rating].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")ratingMap[t.rating].wins++;if(t.outcome==="Loss")ratingMap[t.rating].losses++;}});
+    tradeList.forEach(t=>{if(t.rating&&ratingMap[t.rating]){ratingMap[t.rating].count++;ratingMap[t.rating].pnl+=effectivePnl(t);if(t.outcome==="Win")ratingMap[t.rating].wins++;if(t.outcome==="Loss")ratingMap[t.rating].losses++;}});
     const dayEntries=Object.entries(dayMap);
     const bestDay=dayEntries.length?[...dayEntries].sort((a,b)=>b[1].pnl-a[1].pnl)[0]:null;
     const worstDay=dayEntries.length?[...dayEntries].sort((a,b)=>a[1].pnl-b[1].pnl)[0]:null;
     const dowMap={};
     DAYS_OF_WEEK.forEach(d=>dowMap[d]={count:0,wins:0,losses:0,pnl:0});
-    tradeList.forEach(t=>{const dow=DAYS_OF_WEEK[new Date(t.date+"T12:00:00").getDay()];if(dowMap[dow]){dowMap[dow].count++;dowMap[dow].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")dowMap[dow].wins++;if(t.outcome==="Loss")dowMap[dow].losses++;}});
+    tradeList.forEach(t=>{const dow=DAYS_OF_WEEK[new Date(t.date+"T12:00:00").getDay()];if(dowMap[dow]){dowMap[dow].count++;dowMap[dow].pnl+=effectivePnl(t);if(t.outcome==="Win")dowMap[dow].wins++;if(t.outcome==="Loss")dowMap[dow].losses++;}});
     const mostActiveDay=Object.entries(dowMap).sort((a,b)=>b[1].count-a[1].count)[0];
     const bestWRDay=Object.entries(dowMap).filter(([,d])=>d.count>0).sort((a,b)=>{const awr=a[1].wins/(a[1].wins+a[1].losses||1);const bwr=b[1].wins/(b[1].wins+b[1].losses||1);return bwr-awr;})[0];
     // Points (entry->exit per direction)
@@ -409,7 +415,7 @@ export default function App() {
     if(!base)return null;
     const allAccountsPnl=accounts.reduce((sum,acc)=>{
       const accTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id)&&!t.excludeFromAnalytics);
-      return sum+accTrades.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0);
+      return sum+accTrades.reduce((s,t)=>s+effectivePnl(t),0);
     },0);
     return {...base,totalPnl:allAccountsPnl};
   },[trades,accounts,computeStats]);
@@ -452,7 +458,7 @@ export default function App() {
         const matchingAccounts=(t.accountIds||[]).filter(id=>calSelectedAccounts.includes(id));
         if(!matchingAccounts.length)return;
         if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
-        map[t.date].pnl+=(parseFloat(t.pnl)||0)*matchingAccounts.length;
+        map[t.date].pnl+=effectivePnl(t)*matchingAccounts.length;
         map[t.date].count++;
         if(t.outcome==="Win")map[t.date].wins++;
         if(t.outcome==="Loss")map[t.date].losses++;
@@ -462,7 +468,7 @@ export default function App() {
       trades.forEach(t=>{
         const accountCount=(t.accountIds||[]).length||1;
         if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
-        map[t.date].pnl+=(parseFloat(t.pnl)||0)*accountCount;
+        map[t.date].pnl+=effectivePnl(t)*accountCount;
         map[t.date].count++;
         if(t.outcome==="Win")map[t.date].wins++;
         if(t.outcome==="Loss")map[t.date].losses++;
@@ -587,7 +593,7 @@ export default function App() {
   };
 
   const exportCSV=()=>{
-    const headers=["date","time","exitTime","asset","bias","entry","exit","stopLoss","takeProfit","contracts","outcome","pnl","rr","maxPotentialRR","risk","rating","emotion","followedPlan","confluences","notes","accountIds"];
+    const headers=["date","time","exitTime","asset","bias","entry","exit","stopLoss","takeProfit","contracts","outcome","pnl","pnlMultiplier","rr","maxPotentialRR","risk","rating","emotion","followedPlan","confluences","notes","accountIds"];
     const rows=trades.map(t=>headers.map(h=>{const v=t[h]??"";return`"${Array.isArray(v)?v.join("|"):v.toString().replace(/"/g,'""')}"`}).join(","));
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([[headers.join(","),...rows].join("\n")],{type:"text/csv"}));a.download=`trading_journal_${new Date().toISOString().split("T")[0]}.csv`;a.click();
     showToast("CSV exported");
@@ -599,7 +605,7 @@ export default function App() {
       try{
         const parsed=parseTradovateCSV(e.target.result);
         const withBE=parsed.map(t=>{const pnl=parseFloat(t.pnl)||0;const risk=250;if(Math.abs(pnl)<=risk*BE_TOLERANCE)return{...t,outcome:"Breakeven"};return t;});
-        setImportPreview(withBE);setImportFileName(file.name);setImportSelectedAccounts(activeAccounts.map(a=>a.id));setShowImportModal(true);
+        setImportPreview(withBE);setImportFileName(file.name);setImportSelectedAccounts(activeAccounts.map(a=>a.id));setImportMultiplier("1");setShowImportModal(true);
       }catch{showToast("Could not parse Tradovate file","error");}
     };
     reader.readAsText(file);
@@ -608,7 +614,7 @@ export default function App() {
   const confirmTradovateImport=()=>{
     if(!importPreview||!importSelectedAccounts.length){showToast("Select at least one account","warn");return;}
     const existing=new Set(trades.map(t=>`${t.date}${t.time}${t.entry}`));
-    const newTrades=importPreview.filter(t=>!existing.has(`${t.date}${t.time}${t.entry}`)).map(t=>{const pnl=parseFloat(t.pnl)||0;return{...t,id:Date.now()+Math.random(),accountIds:[...importSelectedAccounts],risk:"250",rr:(pnl/250).toFixed(2)};});
+    const newTrades=importPreview.filter(t=>!existing.has(`${t.date}${t.time}${t.entry}`)).map(t=>{const pnl=parseFloat(t.pnl)||0;return{...t,id:Date.now()+Math.random(),accountIds:[...importSelectedAccounts],risk:"250",rr:(pnl/250).toFixed(2),pnlMultiplier:importMultiplier};});
     setTrades(prev=>[...prev,...newTrades]);setShowImportModal(false);setImportPreview(null);
     showToast(`Imported ${newTrades.length} trades`);
   };
@@ -1064,7 +1070,7 @@ export default function App() {
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {filteredTrades.map((t,i)=>{
-                const oi=trades.indexOf(t);const pnl=parseFloat(t.pnl)||0;
+                const oi=trades.indexOf(t);const pnl=effectivePnl(t);const mult=parseFloat(t.pnlMultiplier)||1;
                 const accs=accounts.filter(a=>(t.accountIds||[]).includes(a.id));
                 const duration=timeDiffMinutes(t.time,t.exitTime);
                 return(
@@ -1078,6 +1084,7 @@ export default function App() {
                         </span>
                         {duration&&<span style={{fontSize:11,color:"#4a5568",background:"rgba(15,22,30,0.6)",border:"1px solid rgba(148,163,184,0.08)",padding:"2px 7px",borderRadius:5}}>{fmtDuration(duration)}</span>}
                         {t.asset&&<span style={{fontSize:11,color:"#7dd3fc",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",padding:"2px 8px",borderRadius:5}}>{t.asset}</span>}
+                        {mult>1&&<span style={{fontSize:11,color:"#c084fc",background:"rgba(192,132,252,0.08)",border:"1px solid rgba(192,132,252,0.2)",padding:"2px 8px",borderRadius:5,fontWeight:600}}>{mult}×</span>}
                         <span style={{fontSize:12,fontWeight:500,color:t.bias==="Bullish"?"#4ade80":"#f87171"}}>{t.bias==="Bullish"?"↑":"↓"} {t.bias}</span>
                         {t.rating&&<span style={{fontSize:12,fontWeight:600,color:ratingColor(t.rating)}}>{t.rating}</span>}
                         {accs.map(a=><span key={a.id} style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",padding:"2px 8px",borderRadius:5}}>{a.name}</span>)}
@@ -1607,7 +1614,7 @@ export default function App() {
             ):(
               <div className="gallery-grid">
                 {galleryTrades.map((t,i)=>{
-                  const pnl=parseFloat(t.pnl)||0;const accs=accounts.filter(a=>(t.accountIds||[]).includes(a.id));
+                  const pnl=effectivePnl(t);const accs=accounts.filter(a=>(t.accountIds||[]).includes(a.id));
                   return(
                     <div key={t.id||i} className="gallery-item" onClick={()=>setExpandedScreenshot(t)}>
                       <div style={{position:"relative"}}>
@@ -1898,6 +1905,14 @@ export default function App() {
               {[["Date","date","date"],["Entry Time","time","time"],["Exit Time","exitTime","time"],["Entry Price","entry","number"],["Exit Price","exit","number"],["Stop Loss","stopLoss","number"],["Take Profit","takeProfit","number"],["Contracts","contracts","number"]].map(([l,k,t])=>(
                 <div key={k}><label style={lbl}>{l}</label><input type={t} value={form[k]} onChange={e=>sf(k,e.target.value)} style={inp}/></div>
               ))}
+              <div>
+                <label style={lbl}>P&L Multiplier <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>e.g. 2× for copy</span></label>
+                <div style={{display:"flex",gap:6}}>
+                  {["1","2","3","4","5"].map(m=>(
+                    <button key={m} onClick={()=>sf("pnlMultiplier",m)} style={{flex:1,padding:"9px 0",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",border:"1px solid",background:(form.pnlMultiplier||"1")===m?"rgba(192,132,252,0.12)":"rgba(15,23,35,0.5)",color:(form.pnlMultiplier||"1")===m?"#c084fc":"#4a5568",borderColor:(form.pnlMultiplier||"1")===m?"rgba(192,132,252,0.3)":"rgba(148,163,184,0.08)",transition:"all 0.15s"}}>{m}×</button>
+                  ))}
+                </div>
+              </div>
               <div><label style={lbl}>Risk ($) <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>defaults $250</span></label><input type="number" value={form.risk} onChange={e=>sf("risk",e.target.value)} style={inp} placeholder="250"/></div>
               <div><label style={lbl}>P&L ($) <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>auto-calculates R:R</span></label><input type="number" value={form.pnl} onChange={e=>sf("pnl",e.target.value)} style={inp}/></div>
               <div><label style={lbl}>R:R Achieved <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>auto-filled</span></label><input type="number" value={form.rr} onChange={e=>sf("rr",e.target.value)} style={inp} placeholder="auto"/></div>
@@ -2007,7 +2022,16 @@ export default function App() {
               </div>
               <div>
                 <AccountCheckboxes accounts={activeAccounts} selected={importSelectedAccounts} onChange={setImportSelectedAccounts} label="Apply to accounts"/>
-                {importSelectedAccounts.length>0&&<div style={{marginTop:10,background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7,padding:"10px 14px",fontSize:12,color:"#4a5568"}}>{importPreview.length} trades → <span style={{color:"#fbbf24",fontWeight:500}}>{importSelectedAccounts.length} account{importSelectedAccounts.length>1?"s":""}</span></div>}
+                <div style={{marginTop:14}}>
+                  <div style={{fontSize:10,fontWeight:600,color:"#475569",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:8}}>P&L Multiplier</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {["1","2","3","4","5"].map(m=>(
+                      <button key={m} onClick={()=>setImportMultiplier(m)} style={{flex:1,padding:"8px 0",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",border:"1px solid",background:importMultiplier===m?"rgba(192,132,252,0.12)":"rgba(15,23,35,0.5)",color:importMultiplier===m?"#c084fc":"#4a5568",borderColor:importMultiplier===m?"rgba(192,132,252,0.3)":"rgba(148,163,184,0.08)",transition:"all 0.15s"}}>{m}×</button>
+                    ))}
+                  </div>
+                  {importMultiplier!=="1"&&<div style={{marginTop:6,fontSize:11,color:"#c084fc"}}>All imported P&L will be counted at {importMultiplier}× in analytics</div>}
+                </div>
+                {importSelectedAccounts.length>0&&<div style={{marginTop:10,background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7,padding:"10px 14px",fontSize:12,color:"#4a5568"}}>{importPreview.length} trades → <span style={{color:"#fbbf24",fontWeight:500}}>{importSelectedAccounts.length} account{importSelectedAccounts.length>1?"s":""}</span>{importMultiplier!=="1"&&<span style={{color:"#c084fc",fontWeight:500}}> @ {importMultiplier}×</span>}</div>}
               </div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:20}}>
