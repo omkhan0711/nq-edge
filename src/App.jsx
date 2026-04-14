@@ -17,9 +17,9 @@ for (let h=9;h<=10;h++) for (let m=0;m<60;m+=5) { if(h===10&&m>30)break; TIME_SL
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", biasCorrect:null, entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, planBreakReason:"", beSaved:null, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], confluences:[] };
+const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", biasCorrect:null, entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, planBreakReason:"", beSaved:null, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], accountMultipliers:{}, confluences:[] };
 const PLAN_BREAK_REASONS = ["FOMO","Gambling","Revenge Trading","Over-Leveraging"];
-const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false, balanceAdjustment:"0", pnlMultiplier:"1" };
+const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false, balanceAdjustment:"0" };
 const EMPTY_ADJUSTMENT = { amount:"", reason:"Data correction", date:new Date().toISOString().split("T")[0] };
 const EMPTY_TRANSACTION = { id:"", type:"challenge_fee", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"", accountStatus:"", firm:"" };
 const TX_TYPES = [
@@ -240,7 +240,7 @@ function parseTradovateCSV(text) {
     const exitTimePart=exitFillTime.split(" ")[1]?.substring(0,5)||"";
     const dp=fillTime.split(" ")[0]?.split("/")||[];
     const tradeDate=dp.length===3?`${dp[2]}-${dp[0].padStart(2,"0")}-${dp[1].padStart(2,"0")}`:new Date().toISOString().split("T")[0];
-    trades.push({...EMPTY,id:Date.now()+Math.random(),date:tradeDate,time:timePart,exitTime:exitTimePart,asset:ASSETS.includes(contractCode)?contractCode:"MNQ",entry:avgEntry.toFixed(2),exit:avgExit.toFixed(2),contracts:String(contracts),pnl:pnl.toFixed(2),outcome:pnl>0.01?"Win":pnl<-0.01?"Loss":"Breakeven",bias:isShort?"Bearish":"Bullish",accountIds:[],notes:`Auto-imported · ${contractCode} · ${isShort?"Short":"Long"} · Commission: ${fmt$(commission)}`});
+    trades.push({...EMPTY,id:Date.now()+Math.random(),date:tradeDate,time:timePart,exitTime:exitTimePart,asset:ASSETS.includes(contractCode)?contractCode:"MNQ",entry:avgEntry.toFixed(2),exit:avgExit.toFixed(2),contracts:String(contracts),pnl:pnl.toFixed(2),outcome:pnl>0.01?"Win":pnl<-0.01?"Loss":"Breakeven",bias:isShort?"Bearish":"Bullish",accountIds:[],accountMultipliers:{},notes:`Auto-imported · ${contractCode} · ${isShort?"Short":"Long"} · Commission: ${fmt$(commission)}`});
   };
   filled.forEach(r=>{
     const side=get(r,"B/S").trim(); const qty=parseFloat(get(r,"Filled Qty"))||0;
@@ -284,7 +284,7 @@ export default function App() {
   const [overviewSelectedAccounts, setOverviewSelectedAccounts] = useState([]);
   const [importPreview, setImportPreview] = useState(null);
   const [importFileName, setImportFileName] = useState("");
-  const [importSelectedAccounts, setImportSelectedAccounts] = useState([]);
+  const [importAccountMults, setImportAccountMults] = useState({});
   const [galleryFilter, setGalleryFilter] = useState({ outcome:"All", confluence:"All" });
   const [editingTransaction, setEditingTransaction] = useState(null); // holds tx being edited
   const [expandedScreenshot, setExpandedScreenshot] = useState(null);
@@ -410,18 +410,16 @@ export default function App() {
     const base=computeStats(trades.filter(t=>!t.excludeFromAnalytics));
     if(!base)return null;
     const allAccountsPnl=accounts.reduce((sum,acc)=>{
-      const mult=parseFloat(acc.pnlMultiplier)||1;
       const accTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id)&&!t.excludeFromAnalytics);
-      return sum+accTrades.reduce((s,t)=>s+(parseFloat(t.pnl)||0)*mult,0);
+      return sum+accTrades.reduce((s,t)=>{const m=(t.accountMultipliers&&t.accountMultipliers[acc.id])||1;return s+(parseFloat(t.pnl)||0)*m;},0);
     },0);
     return {...base,totalPnl:allAccountsPnl};
   },[trades,accounts,computeStats]);
   const isExpenseTx = t => t.type==="expense"||t.type==="challenge_fee"||t.type==="activation_fee";
   const accountStats=useMemo(()=>accounts.map(acc=>{
-    const mult=parseFloat(acc.pnlMultiplier)||1;
-    const accTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id)&&!t.excludeFromAnalytics);
-    const multipliedTrades=mult!==1?accTrades.map(t=>({...t,pnl:String((parseFloat(t.pnl)||0)*mult),contracts:String(Math.round((parseFloat(t.contracts)||1)*mult))})):accTrades;
-    const s=computeStats(multipliedTrades);
+    const rawAccTrades=trades.filter(t=>(t.accountIds||[]).includes(acc.id)&&!t.excludeFromAnalytics);
+    const accTrades=rawAccTrades.map(t=>{const m=(t.accountMultipliers&&t.accountMultipliers[acc.id])||1;return m===1?t:{...t,pnl:String((parseFloat(t.pnl)||0)*m),contracts:String(Math.round((parseFloat(t.contracts)||1)*m))};});
+    const s=computeStats(accTrades);
     const startBal=parseFloat(acc.startingBalance||acc.size)||50000;
     const pnl=s?.totalPnl||0;
     const currentBalance=startBal+pnl;
@@ -451,14 +449,13 @@ export default function App() {
 
   const calDayMap=useMemo(()=>{
     const map={};
-    const accMultMap={};accounts.forEach(a=>{accMultMap[a.id]=parseFloat(a.pnlMultiplier)||1;});
     if(calSelectedAccounts.length>0){
       trades.forEach(t=>{
         const matchingAccounts=(t.accountIds||[]).filter(id=>calSelectedAccounts.includes(id));
         if(!matchingAccounts.length)return;
         if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
         const basePnl=parseFloat(t.pnl)||0;
-        matchingAccounts.forEach(id=>{map[t.date].pnl+=basePnl*(accMultMap[id]||1);});
+        matchingAccounts.forEach(id=>{map[t.date].pnl+=basePnl*((t.accountMultipliers&&t.accountMultipliers[id])||1);});
         map[t.date].count++;
         if(t.outcome==="Win")map[t.date].wins++;
         if(t.outcome==="Loss")map[t.date].losses++;
@@ -468,7 +465,7 @@ export default function App() {
         const linkedAccounts=(t.accountIds||[]);
         if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
         const basePnl=parseFloat(t.pnl)||0;
-        if(linkedAccounts.length)linkedAccounts.forEach(id=>{map[t.date].pnl+=basePnl*(accMultMap[id]||1);});
+        if(linkedAccounts.length)linkedAccounts.forEach(id=>{map[t.date].pnl+=basePnl*((t.accountMultipliers&&t.accountMultipliers[id])||1);});
         else map[t.date].pnl+=basePnl;
         map[t.date].count++;
         if(t.outcome==="Win")map[t.date].wins++;
@@ -476,7 +473,7 @@ export default function App() {
       });
     }
     return map;
-  },[trades,calSelectedAccounts,accounts]);
+  },[trades,calSelectedAccounts]);
 
   const calDays=useMemo(()=>({first:new Date(calMonth.y,calMonth.m,1).getDay(),total:new Date(calMonth.y,calMonth.m+1,0).getDate()}),[calMonth]);
   const availableMonths=useMemo(()=>{const months=new Set(trades.map(t=>t.date?.substring(0,7)).filter(Boolean));return["All",...[...months].sort().reverse()];},[trades]);
@@ -594,7 +591,7 @@ export default function App() {
   };
 
   const exportCSV=()=>{
-    const headers=["date","time","exitTime","asset","bias","entry","exit","stopLoss","takeProfit","contracts","outcome","pnl","rr","maxPotentialRR","risk","rating","emotion","followedPlan","confluences","notes","accountIds"];
+    const headers=["date","time","exitTime","asset","bias","entry","exit","stopLoss","takeProfit","contracts","outcome","pnl","rr","maxPotentialRR","risk","rating","emotion","followedPlan","confluences","notes","accountIds","accountMultipliers"];
     const rows=trades.map(t=>headers.map(h=>{const v=t[h]??"";return`"${Array.isArray(v)?v.join("|"):v.toString().replace(/"/g,'""')}"`}).join(","));
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([[headers.join(","),...rows].join("\n")],{type:"text/csv"}));a.download=`trading_journal_${new Date().toISOString().split("T")[0]}.csv`;a.click();
     showToast("CSV exported");
@@ -606,16 +603,18 @@ export default function App() {
       try{
         const parsed=parseTradovateCSV(e.target.result);
         const withBE=parsed.map(t=>{const pnl=parseFloat(t.pnl)||0;const risk=250;if(Math.abs(pnl)<=risk*BE_TOLERANCE)return{...t,outcome:"Breakeven"};return t;});
-        setImportPreview(withBE);setImportFileName(file.name);setImportSelectedAccounts(activeAccounts.map(a=>a.id));setShowImportModal(true);
+        setImportPreview(withBE);setImportFileName(file.name);setImportAccountMults(Object.fromEntries(activeAccounts.map(a=>[a.id,1])));setShowImportModal(true);
       }catch{showToast("Could not parse Tradovate file","error");}
     };
     reader.readAsText(file);
   };
 
   const confirmTradovateImport=()=>{
-    if(!importPreview||!importSelectedAccounts.length){showToast("Select at least one account","warn");return;}
+    const selectedIds=Object.keys(importAccountMults).filter(id=>importAccountMults[id]>0);
+    if(!importPreview||!selectedIds.length){showToast("Select at least one account","warn");return;}
     const existing=new Set(trades.map(t=>`${t.date}${t.time}${t.entry}`));
-    const newTrades=importPreview.filter(t=>!existing.has(`${t.date}${t.time}${t.entry}`)).map(t=>{const pnl=parseFloat(t.pnl)||0;return{...t,id:Date.now()+Math.random(),accountIds:[...importSelectedAccounts],risk:"250",rr:(pnl/250).toFixed(2)};});
+    const mults=Object.fromEntries(selectedIds.map(id=>[id,importAccountMults[id]||1]));
+    const newTrades=importPreview.filter(t=>!existing.has(`${t.date}${t.time}${t.entry}`)).map(t=>{const pnl=parseFloat(t.pnl)||0;return{...t,id:Date.now()+Math.random(),accountIds:selectedIds,accountMultipliers:mults,risk:"250",rr:(pnl/250).toFixed(2)};});
     setTrades(prev=>[...prev,...newTrades]);setShowImportModal(false);setImportPreview(null);
     showToast(`Imported ${newTrades.length} trades`);
   };
@@ -637,7 +636,7 @@ export default function App() {
   };
 
   const toggleDormant=(idx)=>{setAccounts(prev=>prev.map((a,i)=>i===idx?{...a,dormant:!a.dormant}:a));showToast(accounts[idx].dormant?"Account reactivated":"Account set to dormant");};
-  const openEdit=(idx)=>{setEditIdx(idx);setForm({...EMPTY,...trades[idx],accountIds:trades[idx].accountIds||[],confluences:trades[idx].confluences||[]});setScreenshotPreview(trades[idx].screenshot||null);setShowForm(true);};
+  const openEdit=(idx)=>{setEditIdx(idx);setForm({...EMPTY,...trades[idx],accountIds:trades[idx].accountIds||[],accountMultipliers:trades[idx].accountMultipliers||{},confluences:trades[idx].confluences||[]});setScreenshotPreview(trades[idx].screenshot||null);setShowForm(true);};
   const deleteTrade=(idx)=>{setTrades(prev=>prev.filter((_,i)=>i!==idx));showToast("Trade deleted","warn");};
   const openEditAccount=(idx)=>{setEditAccountIdx(idx);setAccountForm(accounts[idx]);setShowAccountForm(true);};
   const deleteAccount=(idx)=>{setAccounts(prev=>prev.filter((_,i)=>i!==idx));setConfirmDeleteAccount(null);showToast("Account removed","warn");};
@@ -897,7 +896,7 @@ export default function App() {
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                           <div>
                             <div style={{fontSize:13,color:"#94a3b8",fontWeight:500,marginBottom:2}}>{a.name}</div>
-                            <div style={{fontSize:10,color:"#475569"}}>{a.firm}{(parseFloat(a.pnlMultiplier)||1)>1&&<span style={{marginLeft:4,color:"#c084fc",fontWeight:600}}>{a.pnlMultiplier}\u00d7</span>}</div>
+                            <div style={{fontSize:10,color:"#475569"}}>{a.firm}</div>
                           </div>
                           <div style={{textAlign:"right"}}>
                             <div className="mono" style={{fontSize:14,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
@@ -1006,7 +1005,7 @@ export default function App() {
                             <div style={{fontSize:15,fontWeight:600,color:a.dormant?"#4a5568":"#e2e8f0"}}>{a.name}</div>
                             {a.dormant&&<span className="badge" style={{background:"rgba(251,191,36,0.1)",color:"#fbbf24",border:"1px solid rgba(251,191,36,0.2)"}}>Dormant</span>}
                           </div>
-                          <div style={{fontSize:12,color:"#4a5568"}}>{a.firm} · <span style={{color:"#7dd3fc"}}>{a.phase}</span>{(parseFloat(a.pnlMultiplier)||1)>1&&<span style={{marginLeft:6,fontSize:11,color:"#c084fc",background:"rgba(192,132,252,0.08)",border:"1px solid rgba(192,132,252,0.2)",padding:"1px 7px",borderRadius:5,fontWeight:600}}>{a.pnlMultiplier}\u00d7</span>}</div>
+                          <div style={{fontSize:12,color:"#4a5568"}}>{a.firm} · <span style={{color:"#7dd3fc"}}>{a.phase}</span></div>
                         </div>
                         <div style={{textAlign:"right"}}>
                           <div className="mono" style={{fontSize:20,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
@@ -1087,7 +1086,7 @@ export default function App() {
                         {t.asset&&<span style={{fontSize:11,color:"#7dd3fc",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",padding:"2px 8px",borderRadius:5}}>{t.asset}</span>}
                         <span style={{fontSize:12,fontWeight:500,color:t.bias==="Bullish"?"#4ade80":"#f87171"}}>{t.bias==="Bullish"?"↑":"↓"} {t.bias}</span>
                         {t.rating&&<span style={{fontSize:12,fontWeight:600,color:ratingColor(t.rating)}}>{t.rating}</span>}
-                        {accs.map(a=><span key={a.id} style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",padding:"2px 8px",borderRadius:5}}>{a.name}</span>)}
+                        {accs.map(a=>{const m=(t.accountMultipliers&&t.accountMultipliers[a.id])||1;return <span key={a.id} style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",padding:"2px 8px",borderRadius:5}}>{a.name}{m>1&&<span style={{color:"#c084fc",fontWeight:600,marginLeft:3}}>{m}\u00d7</span>}</span>;})}
                         {!t.followedPlan&&<span style={{fontSize:11,color:"#fbbf24"}}>⚠ Off-plan</span>}
                         {t.excludeFromAnalytics&&<span style={{fontSize:11,color:"#f87171",background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",padding:"2px 8px",borderRadius:5}}>Excluded</span>}
                       </div>
@@ -1805,13 +1804,6 @@ export default function App() {
               <div><label style={lbl}>Phase</label><Select value={accountForm.phase} onChange={e=>saf("phase",e.target.value)} options={["Phase 1","Phase 2","Funded","Verification"]}/></div>
               <div><label style={lbl}>Account Size ($)</label><input type="number" value={accountForm.size} onChange={e=>saf("size",e.target.value)} style={inp} placeholder="50000"/></div>
               <div><label style={lbl}>Starting Balance ($)</label><input type="number" value={accountForm.startingBalance} onChange={e=>saf("startingBalance",e.target.value)} style={inp} placeholder="50000"/></div>
-              <div><label style={lbl}>P&L Multiplier <span style={{color:"#334155",fontStyle:"italic",textTransform:"none",letterSpacing:0,fontWeight:400}}>contracts × this</span></label>
-                <div style={{display:"flex",gap:5}}>
-                  {["1","2","3","4","5"].map(m=>(
-                    <button key={m} onClick={()=>saf("pnlMultiplier",m)} style={{flex:1,padding:"9px 0",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",border:"1px solid",background:(accountForm.pnlMultiplier||"1")===m?"rgba(192,132,252,0.12)":"rgba(15,23,35,0.5)",color:(accountForm.pnlMultiplier||"1")===m?"#c084fc":"#4a5568",borderColor:(accountForm.pnlMultiplier||"1")===m?"rgba(192,132,252,0.3)":"rgba(148,163,184,0.08)",transition:"all 0.15s"}}>{m}\u00d7</button>
-                  ))}
-                </div>
-              </div>
               <div style={{gridColumn:"1/-1",background:"rgba(148,163,184,0.04)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:7,padding:"14px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                   <label style={lbl}>Manual Balance Adjustments</label>
@@ -1903,7 +1895,35 @@ export default function App() {
             </div>
 
             <div style={{marginBottom:16}}>
-              <AccountCheckboxes accounts={activeAccounts} selected={form.accountIds||[]} onChange={v=>sf("accountIds",v)} label="Accounts"/>
+              <div style={{fontSize:11,color:"#4a5568",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>Accounts</div>
+              {activeAccounts.sort((a,b)=>a.name.localeCompare(b.name)).map(a=>{
+                const isSelected=(form.accountIds||[]).includes(a.id);
+                const mult=(form.accountMultipliers&&form.accountMultipliers[a.id])||1;
+                return(
+                  <div key={a.id} style={{marginBottom:5,border:`1px solid ${isSelected?"rgba(14,165,233,0.25)":"rgba(148,163,184,0.08)"}`,borderRadius:6,overflow:"hidden",background:isSelected?"rgba(14,165,233,0.04)":"transparent",transition:"all 0.15s"}}>
+                    <div onClick={()=>{
+                      if(isSelected){sf("accountIds",(form.accountIds||[]).filter(x=>x!==a.id));const nm={...(form.accountMultipliers||{})};delete nm[a.id];sf("accountMultipliers",nm);}
+                      else{sf("accountIds",[...(form.accountIds||[]),a.id]);sf("accountMultipliers",{...(form.accountMultipliers||{}),[a.id]:1});}
+                    }} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer"}}>
+                      <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${isSelected?"#0ea5e9":"#334155"}`,background:isSelected?"#0ea5e9":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {isSelected&&<svg width="8" height="8" viewBox="0 0 8 8"><polyline points="1,4 3,6 7,2" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,color:isSelected?"#e2e8f0":"#94a3b8",fontWeight:500}}>{a.name}</div>
+                        <div style={{fontSize:10,color:"#4a5568"}}>{a.firm} · {a.phase}</div>
+                      </div>
+                      {isSelected&&mult>1&&<span style={{fontSize:11,color:"#c084fc",fontWeight:600}}>{mult}×</span>}
+                    </div>
+                    {isSelected&&(
+                      <div style={{padding:"0 12px 8px",display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
+                        {["1","2","3","4","5"].map(m=>(
+                          <button key={m} onClick={()=>sf("accountMultipliers",{...(form.accountMultipliers||{}),[a.id]:parseInt(m)})} style={{flex:1,padding:"4px 0",borderRadius:5,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",border:"1px solid",background:mult===parseInt(m)?"rgba(192,132,252,0.12)":"rgba(15,23,35,0.5)",color:mult===parseInt(m)?"#c084fc":"#4a5568",borderColor:mult===parseInt(m)?"rgba(192,132,252,0.3)":"rgba(148,163,184,0.08)",transition:"all 0.15s"}}>{m}×</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -2020,13 +2040,43 @@ export default function App() {
                 </table>
               </div>
               <div>
-                <AccountCheckboxes accounts={activeAccounts} selected={importSelectedAccounts} onChange={setImportSelectedAccounts} label="Apply to accounts"/>
-                {importSelectedAccounts.length>0&&<div style={{marginTop:10,background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7,padding:"10px 14px",fontSize:12,color:"#4a5568"}}>{importPreview.length} trades → <span style={{color:"#fbbf24",fontWeight:500}}>{importSelectedAccounts.length} account{importSelectedAccounts.length>1?"s":""}</span></div>}
+                <div style={{fontSize:11,color:"#4a5568",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>Accounts & Multipliers</div>
+                {activeAccounts.length?<>
+                  {activeAccounts.sort((a,b)=>a.name.localeCompare(b.name)).map(a=>{
+                    const mult=importAccountMults[a.id]||0;
+                    const isSelected=mult>0;
+                    return(
+                      <div key={a.id} style={{marginBottom:6,border:`1px solid ${isSelected?"rgba(14,165,233,0.25)":"rgba(148,163,184,0.08)"}`,borderRadius:8,overflow:"hidden",background:isSelected?"rgba(14,165,233,0.04)":"transparent",transition:"all 0.15s"}}>
+                        <div onClick={()=>setImportAccountMults(prev=>({...prev,[a.id]:prev[a.id]?0:1}))} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer"}}>
+                          <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${isSelected?"#0ea5e9":"#334155"}`,background:isSelected?"#0ea5e9":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            {isSelected&&<svg width="8" height="8" viewBox="0 0 8 8"><polyline points="1,4 3,6 7,2" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:12,color:isSelected?"#e2e8f0":"#94a3b8",fontWeight:500}}>{a.name}</div>
+                            <div style={{fontSize:10,color:"#4a5568"}}>{a.firm} \u00b7 {a.phase}</div>
+                          </div>
+                          {isSelected&&mult>1&&<span style={{fontSize:11,color:"#c084fc",fontWeight:600,background:"rgba(192,132,252,0.08)",border:"1px solid rgba(192,132,252,0.2)",padding:"1px 7px",borderRadius:5}}>{mult}\u00d7</span>}
+                        </div>
+                        {isSelected&&(
+                          <div style={{padding:"0 12px 10px",display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
+                            {["1","2","3","4","5"].map(m=>(
+                              <button key={m} onClick={()=>setImportAccountMults(prev=>({...prev,[a.id]:parseInt(m)}))} style={{flex:1,padding:"5px 0",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",border:"1px solid",background:mult===parseInt(m)?"rgba(192,132,252,0.12)":"rgba(15,23,35,0.5)",color:mult===parseInt(m)?"#c084fc":"#4a5568",borderColor:mult===parseInt(m)?"rgba(192,132,252,0.3)":"rgba(148,163,184,0.08)",transition:"all 0.15s"}}>{m}\u00d7</button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {(()=>{const sel=Object.entries(importAccountMults).filter(([,m])=>m>0);return sel.length>0&&(
+                    <div style={{marginTop:10,background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7,padding:"10px 14px",fontSize:12,color:"#4a5568"}}>
+                      {importPreview.length} trades \u2192 {sel.map(([id,m])=>{const acc=activeAccounts.find(a=>a.id===id);return <span key={id} style={{color:m>1?"#c084fc":"#fbbf24",fontWeight:500}}>{acc?.name||"?"}{m>1?` @${m}\u00d7`:""} </span>;})}</div>
+                  );})()}
+                </>:<div style={{fontSize:12,color:"#4a5568",padding:"10px 12px",background:"rgba(15,23,35,0.4)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:6}}>No active accounts</div>}
               </div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:20}}>
-              <button onClick={confirmTradovateImport} className="btn btn-success" style={{flex:1,padding:11,fontSize:13}} disabled={!importSelectedAccounts.length}>
-                Confirm Import → {importSelectedAccounts.length} account{importSelectedAccounts.length!==1?"s":""}
+              <button onClick={confirmTradovateImport} className="btn btn-success" style={{flex:1,padding:11,fontSize:13}} disabled={!Object.values(importAccountMults).some(m=>m>0)}>
+                Confirm Import \u2192 {Object.values(importAccountMults).filter(m=>m>0).length} account{Object.values(importAccountMults).filter(m=>m>0).length!==1?"s":""}
               </button>
               <button onClick={()=>setShowImportModal(false)} className="btn btn-ghost" style={{padding:"11px 22px"}}>Cancel</button>
             </div>
