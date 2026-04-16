@@ -29,9 +29,26 @@ const TX_TYPES = [
 ];
 // accountStatus: "" | "passed" | "failed" | "payout_received"
 
+// ── IndexedDB helpers for large blobs (screenshots, aiReview) ──
+const DB_NAME="nq_edge_db", DB_VERSION=1, STORE_NAME="screenshots";
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=e=>e.target.result.createObjectStore(STORE_NAME);r.onsuccess=e=>res(e.target.result);r.onerror=e=>rej(e.target.error);});}
+async function idbSet(key,value){try{const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE_NAME,"readwrite");const req=tx.objectStore(STORE_NAME).put(value,key);req.onsuccess=()=>res();req.onerror=()=>rej(req.error);});}catch{}}
+async function idbGetAll(){try{const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE_NAME,"readonly");const store=tx.objectStore(STORE_NAME);const results={};store.openCursor().onsuccess=e=>{const c=e.target.result;if(c){results[c.key]=c.value;c.continue();}else res(results);};tx.onerror=()=>rej(tx.error);});}catch{return{};}}
+function stripBlobs(trades){return trades.map(t=>{const{screenshot,aiReview,...rest}=t;return rest;});}
+async function rehydrateScreenshots(trades,setTrades){const blobs=await idbGetAll();if(!Object.keys(blobs).length)return;setTrades(prev=>prev.map(t=>({...t,screenshot:blobs[`${t.id}_screenshot`]??t.screenshot??"",aiReview:blobs[`${t.id}_aiReview`]??t.aiReview??""  })));}
+
 function useStorage(key, fallback) {
   const [val, setVal] = useState(() => { try { const s=localStorage.getItem(key); return s?JSON.parse(s):fallback; } catch { return fallback; } });
-  useEffect(() => { try { localStorage.setItem(key,JSON.stringify(val)); } catch {} }, [key,val]);
+  useEffect(() => {
+    try {
+      if(key==="nq_trades_v8"){
+        localStorage.setItem(key,JSON.stringify(stripBlobs(val)));
+        val.forEach(t=>{if(t.id&&(t.screenshot||t.aiReview)){idbSet(`${t.id}_screenshot`,t.screenshot||"");idbSet(`${t.id}_aiReview`,t.aiReview||"");}});
+      } else {
+        localStorage.setItem(key,JSON.stringify(val));
+      }
+    } catch(err){console.warn("Storage save failed:",err);}
+  }, [key,val]);
   return [val, setVal];
 }
 
@@ -279,6 +296,11 @@ export default function App() {
   const [calMonth, setCalMonth] = useState(()=>{ const d=new Date(); return{y:d.getFullYear(),m:d.getMonth()}; });
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReviewLoading, setAiReviewLoading] = useState(false);
+  const [coachMode, setCoachMode] = useState("performance"); // "performance" | "recap"
+  const [coachReport, setCoachReport] = useState("");
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachTradeIdx, setCoachTradeIdx] = useState(0);
+  const [coachDateRange, setCoachDateRange] = useState("all"); // "all"|"30d"|"7d"|"today"
   const [screenshotPreview, setScreenshotPreview] = useState(null);
   const [toast, setToast] = useState(null);
   const [overviewSelectedAccounts, setOverviewSelectedAccounts] = useState([]);
@@ -300,6 +322,9 @@ export default function App() {
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const saf = (k,v) => setAccountForm(f=>({...f,[k]:v}));
   const activeAccounts = useMemo(()=>accounts.filter(a=>showDormant||!a.dormant),[accounts,showDormant]);
+
+  // Rehydrate screenshots/aiReview from IndexedDB on mount
+  useEffect(()=>{ rehydrateScreenshots(trades,setTrades); },[]);
 
   useEffect(()=>{
     const pnl=parseFloat(form.pnl);
@@ -668,6 +693,7 @@ export default function App() {
     {id:"points",label:"Points Analysis"},
     {id:"mindset",label:"Mindset & Plan"},
     {id:"propfirm",label:"Prop Firm Stats"},
+    {id:"aicoach",label:"✦ AI Coach"},
   ];
 
   // Shared input style
@@ -1587,6 +1613,164 @@ export default function App() {
                       )}
 
                       {!propFirmStats.totalAccounts&&<div style={{textAlign:"center",padding:"60px 0",color:"#334155",fontSize:13}}>No account-linked transactions yet — go to Financials and log transactions with accounts, then set pass/fail outcomes.</div>}
+                    </div>
+                  )}
+
+                  {/* ─── AI COACH ─── */}
+                  {analyticsSection==="aicoach"&&(
+                    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                      {/* Mode toggle */}
+                      <div className="card" style={{padding:20}}>
+                        <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>✦ AI Coach</div>
+                        <div style={{fontSize:12,color:"#4a5568",marginBottom:20}}>Get data-driven insights on your trading performance or a detailed recap of a specific trade.</div>
+                        <div style={{display:"flex",gap:8,marginBottom:20}}>
+                          {[["performance","📊 Performance Report"],["recap","🔍 Trade Recap"]].map(([m,label])=>(
+                            <button key={m} onClick={()=>{setCoachMode(m);setCoachReport("");}} style={{padding:"10px 20px",borderRadius:10,border:`1px solid ${coachMode===m?"rgba(14,165,233,0.5)":"rgba(148,163,184,0.1)"}`,background:coachMode===m?"rgba(14,165,233,0.12)":"rgba(15,23,35,0.5)",color:coachMode===m?"#38bdf8":"#64748b",fontSize:13,fontWeight:500,cursor:"pointer",transition:"all 0.2s"}}>{label}</button>
+                          ))}
+                        </div>
+
+                        {coachMode==="performance"&&(
+                          <div>
+                            <div style={{marginBottom:14}}>
+                              <div style={{fontSize:11,color:"#64748b",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600,marginBottom:8}}>Date Range</div>
+                              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                                {[["all","All Time"],["30d","Last 30 Days"],["7d","Last 7 Days"],["today","Today"]].map(([v,l])=>(
+                                  <button key={v} onClick={()=>setCoachDateRange(v)} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${coachDateRange===v?"rgba(14,165,233,0.4)":"rgba(148,163,184,0.08)"}`,background:coachDateRange===v?"rgba(14,165,233,0.1)":"rgba(15,23,35,0.4)",color:coachDateRange===v?"#38bdf8":"#64748b",fontSize:12,cursor:"pointer"}}>{l}</button>
+                                ))}
+                              </div>
+                            </div>
+                            <button disabled={coachLoading||!trades.length} onClick={async()=>{
+                              setCoachLoading(true); setCoachReport("");
+                              try {
+                                const now=new Date();
+                                const cutoff=coachDateRange==="today"?new Date().toISOString().split("T")[0]:coachDateRange==="7d"?new Date(now-7*864e5).toISOString().split("T")[0]:coachDateRange==="30d"?new Date(now-30*864e5).toISOString().split("T")[0]:null;
+                                const filtered=trades.filter(t=>!t.excludeFromAnalytics&&(!cutoff||t.date>=cutoff));
+                                if(!filtered.length){setCoachReport("No trades found for the selected date range.");setCoachLoading(false);return;}
+                                const s=computeStats(filtered);
+                                const topConf=Object.entries(s.confMap).filter(([,v])=>v.count>0).sort((a,b)=>b[1].pnl-a[1].pnl).slice(0,5).map(([c,v])=>`${c}: ${v.count} trades, ${v.wins}W/${v.losses}L, PnL ${fmt$(v.pnl)}`).join("\n");
+                                const worstConf=Object.entries(s.confMap).filter(([,v])=>v.count>0).sort((a,b)=>a[1].pnl-b[1].pnl).slice(0,3).map(([c,v])=>`${c}: ${v.count} trades, ${v.wins}W/${v.losses}L, PnL ${fmt$(v.pnl)}`).join("\n");
+                                const timePerf=Object.entries(s.timeMap).filter(([,v])=>v.count>0).sort((a,b)=>b[1].pnl-a[1].pnl).slice(0,3).map(([t,v])=>`${t}: ${v.count} trades, PnL ${fmt$(v.pnl)}`).join("\n");
+                                const worstTime=Object.entries(s.timeMap).filter(([,v])=>v.count>0).sort((a,b)=>a[1].pnl-b[1].pnl).slice(0,3).map(([t,v])=>`${t}: ${v.count} trades, PnL ${fmt$(v.pnl)}`).join("\n");
+                                const emotionBreakdown=Object.entries(filtered.reduce((acc,t)=>{const e=t.emotion||"Unknown";if(!acc[e])acc[e]={count:0,wins:0,pnl:0};acc[e].count++;acc[e].pnl+=parseFloat(t.pnl)||0;if(t.outcome==="Win")acc[e].wins++;return acc;},{})).map(([e,v])=>`${e}: ${v.count} trades, ${(v.wins/v.count*100).toFixed(0)}% WR, PnL ${fmt$(v.pnl)}`).join("\n");
+                                const ratingBreakdown=Object.entries(s.ratingMap).filter(([,v])=>v.count>0).map(([r,v])=>`${r}: ${v.count} trades, ${v.wins}W/${v.losses}L, PnL ${fmt$(v.pnl)}`).join("\n");
+                                const planBreaks=Object.entries(s.planBreakMap).filter(([,v])=>v>0).map(([r,v])=>`${r}: ${v}x`).join(", ")||"None";
+                                const prompt=`You are an expert NQ futures trading coach. Analyze this trader's performance data and give a structured, honest, specific report.
+
+PERFORMANCE DATA (${coachDateRange==="all"?"All Time":coachDateRange==="today"?"Today":coachDateRange==="7d"?"Last 7 Days":"Last 30 Days"} — ${filtered.length} trades):
+Win Rate: ${s.winRate.toFixed(1)}% | Profit Factor: ${s.profitFactor.toFixed(2)} | Total P&L: ${fmt$(s.totalPnl)}
+Avg Win: ${fmt$(s.avgWin)} | Avg Loss: ${fmt$(s.avgLoss)} | Avg R:R: ${s.avgRR.toFixed(2)}R
+Max Drawdown: ${fmt$(s.maxDD)} | Followed Plan: ${s.followedPlanRate.toFixed(0)}% of trades
+Long WR: ${s.longWR.toFixed(1)}% (${s.longs} trades) | Short WR: ${s.shortWR.toFixed(1)}% (${s.shorts} trades)
+Avg Trade Duration: ${fmtDuration(s.avgDuration)} | Wins: ${fmtDuration(s.avgWinDuration)} | Losses: ${fmtDuration(s.avgLossDuration)}
+Avg R left on table: ${s.avgLeft.toFixed(2)}R | Bias accuracy: ${s.biasCorrectRate!==null?s.biasCorrectRate.toFixed(1)+"%":"N/A"}
+Best confluence setups (by P&L):\n${topConf||"N/A"}
+Worst confluence setups:\n${worstConf||"N/A"}
+Best time slots:\n${timePerf||"N/A"}
+Worst time slots:\n${worstTime||"N/A"}
+Emotion breakdown:\n${emotionBreakdown||"N/A"}
+Trade ratings breakdown:\n${ratingBreakdown||"N/A"}
+Plan breaks: ${planBreaks}
+Plan break reasons: ${planBreaks}
+
+Write a structured performance report with these exact sections:
+## What You're Doing Well
+## What's Hurting Your Performance
+## Key Patterns & Tendencies
+## Emotional & Discipline Analysis
+## Top 3 Actionable Improvements
+Be specific and data-driven. Reference actual numbers. No generic advice. Under 500 words total.`;
+                                const result=await callClaude([{role:"user",content:prompt}],"You are a professional NQ futures trading coach. Be direct, specific, and data-driven. Use markdown headers and bullet points.");
+                                setCoachReport(result);
+                              } catch(e){setCoachReport("Error generating report. Check your API key.");}
+                              setCoachLoading(false);
+                            }} style={{padding:"11px 24px",borderRadius:10,border:"none",background:coachLoading||!trades.length?"rgba(14,165,233,0.1)":"linear-gradient(135deg,rgba(14,165,233,0.8),rgba(6,182,212,0.8))",color:coachLoading||!trades.length?"#334155":"#fff",fontSize:13,fontWeight:600,cursor:coachLoading||!trades.length?"not-allowed":"pointer",transition:"all 0.2s"}}>
+                              {coachLoading?"Analysing your trades...":"Generate Performance Report"}
+                            </button>
+                          </div>
+                        )}
+
+                        {coachMode==="recap"&&(
+                          <div>
+                            <div style={{marginBottom:14}}>
+                              <div style={{fontSize:11,color:"#64748b",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600,marginBottom:8}}>Select Trade</div>
+                              <select value={coachTradeIdx} onChange={e=>setCoachTradeIdx(Number(e.target.value))} style={{width:"100%",background:"rgba(15,23,35,0.5)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:10,padding:"10px 14px",color:"#e2e8f0",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none"}}>
+                                {[...trades].sort((a,b)=>b.date.localeCompare(a.date)).map((t,i)=>{
+                                  const origIdx=trades.indexOf(t);
+                                  return <option key={origIdx} value={origIdx} style={{background:"#0a1018"}}>{t.date} {t.time||""} · {t.asset||"MNQ"} · {t.outcome} · {t.pnl?fmt$(parseFloat(t.pnl)):""}</option>;
+                                })}
+                              </select>
+                            </div>
+                            <button disabled={coachLoading||!trades.length} onClick={async()=>{
+                              setCoachLoading(true); setCoachReport("");
+                              try {
+                                const t=trades[coachTradeIdx];
+                                if(!t){setCoachReport("Trade not found.");setCoachLoading(false);return;}
+                                const accs=accounts.filter(a=>(t.accountIds||[]).includes(a.id));
+                                const allStats=computeStats(trades.filter(x=>!x.excludeFromAnalytics));
+                                const similarTrades=trades.filter(x=>x.id!==t.id&&!x.excludeFromAnalytics&&x.asset===t.asset&&x.bias===t.bias).slice(0,20);
+                                const simWR=similarTrades.length?(similarTrades.filter(x=>x.outcome==="Win").length/similarTrades.filter(x=>x.outcome!=="Breakeven").length*100):null;
+                                const prompt=`You are an expert NQ futures trading coach. Give a detailed, honest recap of this specific trade.
+
+TRADE DETAILS:
+Date: ${t.date} | Entry Time: ${t.time||"?"} → Exit: ${t.exitTime||"?"}
+Asset: ${t.asset||"MNQ"} | Direction: ${t.bias} | Bias Correct: ${t.biasCorrect===true?"Yes":t.biasCorrect===false?"No":"Not recorded"}
+Entry: ${t.entry||"?"} | Stop Loss: ${t.stopLoss||"?"} | Take Profit: ${t.takeProfit||"?"} | Exit: ${t.exit||"?"}
+P&L: ${t.pnl?fmt$(parseFloat(t.pnl)):"?"} | R:R Achieved: ${t.rr||"?"}R | Max Potential R:R: ${t.maxPotentialRR||"?"}R
+Risk: $${t.risk||250} | Contracts: ${t.contracts||1}
+Confluences used: ${(t.confluences||[]).join(", ")||"None"}
+Emotion: ${t.emotion||"?"} | Followed Plan: ${t.followedPlan?"Yes":"No"}${!t.followedPlan&&t.planBreakReason?` (Reason: ${t.planBreakReason})`:""}
+Trade Rating: ${t.rating||"Not rated"} | Breakeven saved: ${t.beSaved===true?"Yes":t.beSaved===false?"No":"N/A"}
+Notes: ${t.notes||"None"}
+Account(s): ${accs.map(a=>a.name).join(", ")||"Not linked"}
+
+CONTEXT FROM OVERALL STATS:
+Overall Win Rate: ${allStats?allStats.winRate.toFixed(1)+"%":"N/A"}
+${t.asset} ${t.bias} trades (similar): ${similarTrades.length} trades, ${simWR!==null?simWR.toFixed(1)+"%":"?"} WR
+Avg R left on table overall: ${allStats?allStats.avgLeft.toFixed(2)+"R":"N/A"}
+
+Write a structured trade recap with these exact sections:
+## Trade Summary
+## Execution Analysis
+## What Went Well
+## What Could Be Improved
+## R Left on the Table
+## Lesson to Take Forward
+Be specific, honest and reference the actual numbers. Under 400 words.`;
+                                const result=await callClaude([{role:"user",content:prompt}],"You are a professional NQ futures trading coach. Be direct, specific, and data-driven. Use markdown headers and bullet points.");
+                                setCoachReport(result);
+                              } catch(e){setCoachReport("Error generating recap. Check your API key.");}
+                              setCoachLoading(false);
+                            }} style={{padding:"11px 24px",borderRadius:10,border:"none",background:coachLoading||!trades.length?"rgba(14,165,233,0.1)":"linear-gradient(135deg,rgba(14,165,233,0.8),rgba(6,182,212,0.8))",color:coachLoading||!trades.length?"#334155":"#fff",fontSize:13,fontWeight:600,cursor:coachLoading||!trades.length?"not-allowed":"pointer",transition:"all 0.2s"}}>
+                              {coachLoading?"Analysing trade...":"Generate Trade Recap"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Report output */}
+                      {coachLoading&&(
+                        <div className="card" style={{padding:32,textAlign:"center"}}>
+                          <div style={{fontSize:13,color:"#38bdf8",marginBottom:8}}>✦ Analysing your trading data...</div>
+                          <div style={{fontSize:12,color:"#4a5568"}}>This takes a few seconds</div>
+                        </div>
+                      )}
+                      {coachReport&&!coachLoading&&(
+                        <div className="card" style={{padding:24}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+                            <div style={{fontSize:14,fontWeight:600,color:"#38bdf8"}}>✦ {coachMode==="performance"?"Performance Report":"Trade Recap"}</div>
+                            <button onClick={()=>setCoachReport("")} style={{background:"none",border:"none",color:"#4a5568",cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
+                          </div>
+                          <div style={{fontSize:13,color:"#cbd5e1",lineHeight:1.8,whiteSpace:"pre-wrap"}}>
+                            {coachReport.split("\n").map((line,i)=>{
+                              if(line.startsWith("## ")) return <div key={i} style={{fontSize:14,fontWeight:700,color:"#e2e8f0",marginTop:i===0?0:20,marginBottom:8,borderBottom:"1px solid rgba(148,163,184,0.08)",paddingBottom:6}}>{line.replace("## ","")}</div>;
+                              if(line.startsWith("- ")) return <div key={i} style={{paddingLeft:16,marginBottom:4,color:"#cbd5e1",position:"relative"}}><span style={{position:"absolute",left:4,color:"#38bdf8"}}>·</span>{line.replace("- ","")}</div>;
+                              if(line.startsWith("**")&&line.endsWith("**")) return <div key={i} style={{fontWeight:600,color:"#e2e8f0",marginBottom:4}}>{line.replace(/\*\*/g,"")}</div>;
+                              if(!line.trim()) return <div key={i} style={{height:8}}/>;
+                              return <div key={i} style={{marginBottom:4,color:"#94a3b8"}}>{line}</div>;
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
