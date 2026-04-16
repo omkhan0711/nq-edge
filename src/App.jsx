@@ -52,12 +52,13 @@ function useStorage(key, fallback) {
   return [val, setVal];
 }
 
-async function callClaude(messages, systemPrompt) {
+async function callClaude(messages, systemPrompt, maxTokens=1000) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method:"POST", headers:{ "Content-Type":"application/json", "x-api-key":import.meta.env.VITE_ANTHROPIC_KEY, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
-    body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000, system:systemPrompt, messages })
+    body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:maxTokens, system:systemPrompt, messages })
   });
   const data = await res.json();
+  if(data.error) throw new Error(data.error.message||"API error");
   return data.content?.map(b=>b.text||"").join("")||"";
 }
 
@@ -1679,9 +1680,9 @@ Write a structured performance report with these exact sections:
 ## Emotional & Discipline Analysis
 ## Top 3 Actionable Improvements
 Be specific and data-driven. Reference actual numbers. No generic advice. Under 500 words total.`;
-                                const result=await callClaude([{role:"user",content:prompt}],"You are a professional NQ futures trading coach. Be direct, specific, and data-driven. Use markdown headers and bullet points.");
-                                setCoachReport(result);
-                              } catch(e){setCoachReport("Error generating report. Check your API key.");}
+                                const result=await callClaude([{role:"user",content:prompt}],"You are a professional NQ futures trading coach. Be direct, specific, and data-driven. Use markdown headers and bullet points.",2048);
+                                setCoachReport(result||"No response received. Please try again.");
+                              } catch(e){setCoachReport("Error: "+e.message);}
                               setCoachLoading(false);
                             }} style={{padding:"11px 24px",borderRadius:10,border:"none",background:coachLoading||!trades.length?"rgba(14,165,233,0.1)":"linear-gradient(135deg,rgba(14,165,233,0.8),rgba(6,182,212,0.8))",color:coachLoading||!trades.length?"#334155":"#fff",fontSize:13,fontWeight:600,cursor:coachLoading||!trades.length?"not-allowed":"pointer",transition:"all 0.2s"}}>
                               {coachLoading?"Analysing your trades...":"Generate Performance Report"}
@@ -1736,9 +1737,9 @@ Write a structured trade recap with these exact sections:
 ## R Left on the Table
 ## Lesson to Take Forward
 Be specific, honest and reference the actual numbers. Under 400 words.`;
-                                const result=await callClaude([{role:"user",content:prompt}],"You are a professional NQ futures trading coach. Be direct, specific, and data-driven. Use markdown headers and bullet points.");
-                                setCoachReport(result);
-                              } catch(e){setCoachReport("Error generating recap. Check your API key.");}
+                                const result=await callClaude([{role:"user",content:prompt}],"You are a professional NQ futures trading coach. Be direct, specific, and data-driven. Use markdown headers and bullet points.",2048);
+                                setCoachReport(result||"No response received. Please try again.");
+                              } catch(e){setCoachReport("Error: "+e.message);}
                               setCoachLoading(false);
                             }} style={{padding:"11px 24px",borderRadius:10,border:"none",background:coachLoading||!trades.length?"rgba(14,165,233,0.1)":"linear-gradient(135deg,rgba(14,165,233,0.8),rgba(6,182,212,0.8))",color:coachLoading||!trades.length?"#334155":"#fff",fontSize:13,fontWeight:600,cursor:coachLoading||!trades.length?"not-allowed":"pointer",transition:"all 0.2s"}}>
                               {coachLoading?"Analysing trade...":"Generate Trade Recap"}
