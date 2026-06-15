@@ -259,7 +259,9 @@ function parseTradovateCSV(text) {
     const exitTimePart=exitFillTime.split(" ")[1]?.substring(0,5)||"";
     const dp=fillTime.split(" ")[0]?.split("/")||[];
     const tradeDate=dp.length===3?`${dp[2]}-${dp[0].padStart(2,"0")}-${dp[1].padStart(2,"0")}`:new Date().toISOString().split("T")[0];
-    trades.push({...EMPTY,id:Date.now()+Math.random(),date:tradeDate,time:timePart,exitTime:exitTimePart,asset:ASSETS.includes(contractCode)?contractCode:"MNQ",entry:avgEntry.toFixed(2),exit:avgExit.toFixed(2),contracts:String(contracts),pnl:pnl.toFixed(2),outcome:pnl>0.01?"Win":pnl<-0.01?"Loss":"Breakeven",bias:isShort?"Bearish":"Bullish",accountIds:[],accountMultipliers:{},notes:`Auto-imported · ${contractCode} · ${isShort?"Short":"Long"} · Commission: ${fmt$(commission)}`});
+    const exitPrices=exitOrders.map(r=>parseFloat(get(r,"Avg Fill Price"))||0).filter(p=>p>0);
+    const takeProfit=exitPrices.length?(isShort?Math.min(...exitPrices):Math.max(...exitPrices)):null;
+    trades.push({...EMPTY,id:Date.now()+Math.random(),date:tradeDate,time:timePart,exitTime:exitTimePart,asset:ASSETS.includes(contractCode)?contractCode:"MNQ",entry:avgEntry.toFixed(2),exit:avgExit.toFixed(2),contracts:String(contracts),pnl:pnl.toFixed(2),outcome:pnl>0.01?"Win":pnl<-0.01?"Loss":"Breakeven",bias:isShort?"Bearish":"Bullish",takeProfit:takeProfit?takeProfit.toFixed(2):"",accountIds:[],accountMultipliers:{},notes:`Auto-imported · ${contractCode} · ${isShort?"Short":"Long"} · Commission: ${fmt$(commission)}`});
   };
   filled.forEach(r=>{
     const side=get(r,"B/S").trim(); const qty=parseFloat(get(r,"Filled Qty"))||0;
