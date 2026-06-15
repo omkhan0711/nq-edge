@@ -53,6 +53,7 @@ function useStorage(key, fallback) {
 }
 
 async function callClaude(messages, systemPrompt, maxTokens=1000) {
+  console.log("API KEY:", import.meta.env.VITE_ANTHROPIC_KEY?.slice(0,15));
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method:"POST", headers:{ "Content-Type":"application/json", "x-api-key":import.meta.env.VITE_ANTHROPIC_KEY, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
     body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:maxTokens, system:systemPrompt, messages })
@@ -593,10 +594,10 @@ export default function App() {
       setForm(f=>({...f,screenshot:e.target.result}));
       setAiLoading(true);
       try{
-        const raw=await callClaude([{role:"user",content:[{type:"image",source:{type:"base64",media_type:file.type||"image/png",data:b64}},{type:"text",text:`Analyze this NQ futures TradingView chart. Return ONLY valid JSON:\n{"entry":number|null,"stopLoss":number|null,"takeProfit":number|null,"exit":number|null,"time":"HH:MM"|null,"exitTime":"HH:MM"|null,"bias":"Bullish"|"Bearish"|"Neutral"|null,"pnl":number|null,"rr":number|null,"confluences":[],"notes":string|null}`}]}],"You are an expert NQ futures ICT analyst. Extract trade data from TradingView screenshots. Return only valid JSON, no markdown.");
+        const raw=await callClaude([{role:"user",content:[{type:"image",source:{type:"base64",media_type:file.type||"image/png",data:b64}},{type:"text",text:`Analyze this NQ futures TradingView chart. Identify the stop loss level only. Return ONLY valid JSON:\n{"stopLoss":number|null}`}]}],"You are an expert NQ futures ICT analyst. Extract the stop loss level from TradingView screenshots. Return only valid JSON, no markdown.");
         const parsed=JSON.parse(raw.replace(/```json|```/g,"").trim());
-        setForm(f=>({...f,...(parsed.entry&&{entry:String(parsed.entry)}),...(parsed.stopLoss&&{stopLoss:String(parsed.stopLoss)}),...(parsed.takeProfit&&{takeProfit:String(parsed.takeProfit)}),...(parsed.exit&&{exit:String(parsed.exit)}),...(parsed.time&&{time:parsed.time}),...(parsed.exitTime&&{exitTime:parsed.exitTime}),...(parsed.bias&&BIASES.includes(parsed.bias)&&{bias:parsed.bias}),...(parsed.pnl!=null&&{pnl:String(parsed.pnl)}),...(parsed.rr&&{rr:String(parsed.rr)}),...(parsed.confluences?.length&&{confluences:parsed.confluences.filter(c=>confluences.includes(c))}),...(parsed.notes&&{notes:parsed.notes})}));
-        showToast("AI extracted trade data");
+        setForm(f=>({...f,...(parsed.stopLoss&&{stopLoss:String(parsed.stopLoss)})}));
+        showToast("AI extracted stop loss");
       }catch{showToast("Could not parse chart","error");}
       setAiLoading(false);
     };
@@ -2072,7 +2073,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
               ):(
                 <>
                   <div style={{fontSize:24,marginBottom:8}}>📊</div>
-                  <div style={{color:"#4a5568",fontSize:13}}>Drop TradingView screenshot · AI auto-fills entry, SL, TP and R</div>
+                  <div style={{color:"#4a5568",fontSize:13}}>Drop TradingView screenshot · AI auto-fills Stop Loss</div>
                   <div style={{color:"#334155",fontSize:11,marginTop:4}}>or click to browse</div>
                 </>
               )}
