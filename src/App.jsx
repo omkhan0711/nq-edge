@@ -259,9 +259,7 @@ function parseTradovateCSV(text) {
     const exitTimePart=exitFillTime.split(" ")[1]?.substring(0,5)||"";
     const dp=fillTime.split(" ")[0]?.split("/")||[];
     const tradeDate=dp.length===3?`${dp[2]}-${dp[0].padStart(2,"0")}-${dp[1].padStart(2,"0")}`:new Date().toISOString().split("T")[0];
-    const exitPrices=exitOrders.map(r=>parseFloat(get(r,"Avg Fill Price"))||0).filter(p=>p>0);
-    const takeProfit=exitPrices.length?(isShort?Math.min(...exitPrices):Math.max(...exitPrices)):null;
-    trades.push({...EMPTY,id:Date.now()+Math.random(),date:tradeDate,time:timePart,exitTime:exitTimePart,asset:ASSETS.includes(contractCode)?contractCode:"MNQ",entry:avgEntry.toFixed(2),exit:avgExit.toFixed(2),contracts:String(contracts),pnl:pnl.toFixed(2),outcome:pnl>0.01?"Win":pnl<-0.01?"Loss":"Breakeven",bias:isShort?"Bearish":"Bullish",takeProfit:takeProfit?takeProfit.toFixed(2):"",accountIds:[],accountMultipliers:{},notes:`Auto-imported · ${contractCode} · ${isShort?"Short":"Long"} · Commission: ${fmt$(commission)}`});
+    trades.push({...EMPTY,id:Date.now()+Math.random(),date:tradeDate,time:timePart,exitTime:exitTimePart,asset:ASSETS.includes(contractCode)?contractCode:"MNQ",entry:avgEntry.toFixed(2),exit:avgExit.toFixed(2),contracts:String(contracts),pnl:pnl.toFixed(2),outcome:pnl>0.01?"Win":pnl<-0.01?"Loss":"Breakeven",bias:isShort?"Bearish":"Bullish",accountIds:[],accountMultipliers:{},notes:`Auto-imported · ${contractCode} · ${isShort?"Short":"Long"} · Commission: ${fmt$(commission)}`});
   };
   filled.forEach(r=>{
     const side=get(r,"B/S").trim(); const qty=parseFloat(get(r,"Filled Qty"))||0;
@@ -359,14 +357,14 @@ export default function App() {
     let cum=0,peak=0,maxDD=0;
     const equity=sorted.map(t=>{cum+=parseFloat(t.pnl)||0;if(cum>peak)peak=cum;const dd=peak-cum;if(dd>maxDD)maxDD=dd;return{date:t.date,value:cum};});
     const dayMap={};
-    tradeList.forEach(t=>{if(!dayMap[t.date])dayMap[t.date]={pnl:0,count:0,wins:0,losses:0};dayMap[t.date].pnl+=parseFloat(t.pnl)||0;dayMap[t.date].count++;if(t.outcome==="Win")dayMap[t.date].wins++;if(t.outcome==="Loss")dayMap[t.date].losses++;});
+    tradeList.forEach(t=>{if(!dayMap[t.date])dayMap[t.date]={pnl:0,count:0,wins:0,losses:0,maxAccounts:0};dayMap[t.date].pnl+=parseFloat(t.pnl)||0;dayMap[t.date].count++;if(t.outcome==="Win")dayMap[t.date].wins++;if(t.outcome==="Loss")dayMap[t.date].losses++;const ac=(t.accountIds||[]).length||1;if(ac>dayMap[t.date].maxAccounts)dayMap[t.date].maxAccounts=ac;});
     const followedPlanRate=tradeList.filter(t=>t.followedPlan).length/tradeList.length*100;
     const revSorted=[...sorted].reverse(); let streak=0;
-    for(let i=0;i<revSorted.length;i++){const t=revSorted[i];if(i===0){streak=t.outcome==="Win"?1:t.outcome==="Loss"?-1:0;}else{if(t.outcome==="Win"&&streak>0)streak++;else if(t.outcome==="Loss"&&streak<0)streak--;else break;}}
+    for(let i=0;i<revSorted.length;i++){const t=revSorted[i];if(t.outcome==="Breakeven")continue;if(streak===0){streak=t.outcome==="Win"?1:-1;}else if(t.outcome==="Win"&&streak>0)streak++;else if(t.outcome==="Loss"&&streak<0)streak--;else break;}
     const winStreak=streak>0?streak:0;
     const sortedDays=Object.entries(dayMap).sort((a,b)=>b[0].localeCompare(a[0]));
     let greenDayStreak=0;
-    for(const [,d] of sortedDays){if(d.pnl>0)greenDayStreak++;else break;}
+    for(const [,d] of sortedDays){const beThresh=(d.maxAccounts||1)*50;if(d.pnl>0||Math.abs(d.pnl)<=beThresh)greenDayStreak++;else break;}
     const rrDist={};
     RR_BUCKETS.forEach(b=>rrDist[b]={count:0,wins:0,losses:0});
     tradeList.filter(t=>t.rr).forEach(t=>{
@@ -482,23 +480,25 @@ export default function App() {
       trades.forEach(t=>{
         const matchingAccounts=(t.accountIds||[]).filter(id=>calSelectedAccounts.includes(id));
         if(!matchingAccounts.length)return;
-        if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
+        if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0,maxAccounts:0};
         const basePnl=parseFloat(t.pnl)||0;
         matchingAccounts.forEach(id=>{map[t.date].pnl+=basePnl*((t.accountMultipliers&&t.accountMultipliers[id])||1);});
         map[t.date].count++;
         if(t.outcome==="Win")map[t.date].wins++;
         if(t.outcome==="Loss")map[t.date].losses++;
+        const ac=matchingAccounts.length||1;if(ac>map[t.date].maxAccounts)map[t.date].maxAccounts=ac;
       });
     } else {
       trades.forEach(t=>{
         const linkedAccounts=(t.accountIds||[]);
-        if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0};
+        if(!map[t.date])map[t.date]={pnl:0,count:0,wins:0,losses:0,maxAccounts:0};
         const basePnl=parseFloat(t.pnl)||0;
         if(linkedAccounts.length)linkedAccounts.forEach(id=>{map[t.date].pnl+=basePnl*((t.accountMultipliers&&t.accountMultipliers[id])||1);});
         else map[t.date].pnl+=basePnl;
         map[t.date].count++;
         if(t.outcome==="Win")map[t.date].wins++;
         if(t.outcome==="Loss")map[t.date].losses++;
+        const ac=linkedAccounts.length||1;if(ac>map[t.date].maxAccounts)map[t.date].maxAccounts=ac;
       });
     }
     return map;
@@ -596,10 +596,10 @@ export default function App() {
       setForm(f=>({...f,screenshot:e.target.result}));
       setAiLoading(true);
       try{
-        const raw=await callClaude([{role:"user",content:[{type:"image",source:{type:"base64",media_type:file.type||"image/png",data:b64}},{type:"text",text:`Analyze this NQ futures TradingView chart. Identify the stop loss level only. Return ONLY valid JSON:\n{"stopLoss":number|null}`}]}],"You are an expert NQ futures ICT analyst. Extract the stop loss level from TradingView screenshots. Return only valid JSON, no markdown.");
+        const raw=await callClaude([{role:"user",content:[{type:"image",source:{type:"base64",media_type:file.type||"image/png",data:b64}},{type:"text",text:`Analyze this NQ futures TradingView chart. Return ONLY valid JSON:\n{"entry":number|null,"stopLoss":number|null,"takeProfit":number|null,"exit":number|null,"time":"HH:MM"|null,"exitTime":"HH:MM"|null,"bias":"Bullish"|"Bearish"|"Neutral"|null,"pnl":number|null,"rr":number|null,"confluences":[],"notes":string|null}`}]}],"You are an expert NQ futures ICT analyst. Extract trade data from TradingView screenshots. Return only valid JSON, no markdown.");
         const parsed=JSON.parse(raw.replace(/```json|```/g,"").trim());
-        setForm(f=>({...f,...(parsed.stopLoss&&{stopLoss:String(parsed.stopLoss)})}));
-        showToast("AI extracted stop loss");
+        setForm(f=>({...f,...(parsed.entry&&{entry:String(parsed.entry)}),...(parsed.stopLoss&&{stopLoss:String(parsed.stopLoss)}),...(parsed.takeProfit&&{takeProfit:String(parsed.takeProfit)}),...(parsed.exit&&{exit:String(parsed.exit)}),...(parsed.time&&{time:parsed.time}),...(parsed.exitTime&&{exitTime:parsed.exitTime}),...(parsed.bias&&BIASES.includes(parsed.bias)&&{bias:parsed.bias}),...(parsed.pnl!=null&&{pnl:String(parsed.pnl)}),...(parsed.rr&&{rr:String(parsed.rr)}),...(parsed.confluences?.length&&{confluences:parsed.confluences.filter(c=>confluences.includes(c))}),...(parsed.notes&&{notes:parsed.notes})}));
+        showToast("AI extracted trade data");
       }catch{showToast("Could not parse chart","error");}
       setAiLoading(false);
     };
@@ -983,16 +983,23 @@ export default function App() {
                       const ds=`${calMonth.y}-${String(calMonth.m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
                       const d=calDayMap[ds]; const ht=!!d;
                       const today=new Date().toISOString().split("T")[0]===ds;
+                      const beThresh=ht?(d.maxAccounts||1)*50:50;
+                      const isBeDay=ht&&Math.abs(d.pnl)<=beThresh;
+                      const isGreen=ht&&!isBeDay&&d.pnl>0;
+                      const isRed=ht&&!isBeDay&&d.pnl<0;
+                      const borderCol=today?"#3b82f6":!ht?"#141c26":isBeDay?"rgba(251,191,36,0.3)":isGreen?"rgba(74,222,128,0.25)":"rgba(248,113,113,0.25)";
+                      const bgCol=!ht?"transparent":isBeDay?"rgba(251,191,36,0.05)":isGreen?"rgba(74,222,128,0.04)":"rgba(248,113,113,0.04)";
+                      const pnlCol=!ht?"#4a5568":isBeDay?"#fbbf24":isGreen?"#4ade80":"#f87171";
                       return(
                         <div key={day} className="cal-cell" style={{
-                          borderColor:today?"#3b82f6":ht?(d.pnl>=0?"rgba(74,222,128,0.25)":"rgba(248,113,113,0.25)"):"#141c26",
-                          background:ht?(d.pnl>=0?"rgba(74,222,128,0.04)":"rgba(248,113,113,0.04)"):"transparent"
+                          borderColor:borderCol,
+                          background:bgCol
                         }}>
                           <div style={{fontSize:12,color:today?"#60a5fa":"#334155",marginBottom:6,fontWeight:today?600:400}}>{day}</div>
                           {ht&&(
                             <>
-                              <div className="mono" style={{fontSize:13,fontWeight:500,color:d.pnl>=0?"#4ade80":"#f87171",marginBottom:2}}>{fmt$(d.pnl)}</div>
-                              <div style={{fontSize:10,color:"#334155"}}>{d.count}t · {d.wins}W {d.losses}L</div>
+                              <div className="mono" style={{fontSize:13,fontWeight:500,color:pnlCol,marginBottom:2}}>{fmt$(d.pnl)}</div>
+                              <div style={{fontSize:10,color:"#334155"}}>{d.count}t · {d.wins}W {d.losses}L{isBeDay?" · ~BE":""}</div>
                             </>
                           )}
                         </div>
@@ -2075,7 +2082,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
               ):(
                 <>
                   <div style={{fontSize:24,marginBottom:8}}>📊</div>
-                  <div style={{color:"#4a5568",fontSize:13}}>Drop TradingView screenshot · AI auto-fills Stop Loss</div>
+                  <div style={{color:"#4a5568",fontSize:13}}>Drop TradingView screenshot · AI auto-fills entry, SL, TP and R</div>
                   <div style={{color:"#334155",fontSize:11,marginTop:4}}>or click to browse</div>
                 </>
               )}
