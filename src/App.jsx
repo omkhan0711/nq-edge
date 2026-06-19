@@ -865,6 +865,112 @@ export default function App() {
                   ))}
                 </div>
 
+                {/* ── NQ EDGE SCORE ── */}
+                {activeStats&&activeStats.total>=5&&(()=>{
+                  const s=activeStats;
+                  // 1. Win/Loss Ratio (20%)
+                  const wlRatio=s.avgLoss?Math.abs(s.avgWin/s.avgLoss):s.avgWin?3:0;
+                  const wlScore=wlRatio>=2.6?100:wlRatio>=2.4?90:wlRatio>=2.2?80:wlRatio>=2.0?70:wlRatio>=1.9?60:wlRatio>=1.8?50:20;
+                  // 2. Win Rate (15%) — capped at 60%
+                  const wrScore=Math.min(100,(s.winRate/60)*100);
+                  // 3. Max Drawdown (20%) — lower is better
+                  const ddPct=s.totalPnl>0?Math.min(100,(s.maxDD/Math.max(s.totalPnl,1))*100):s.maxDD>0?100:0;
+                  const ddScore=Math.max(0,100-ddPct);
+                  // 4. Profit Factor (25%)
+                  const pf=s.profitFactor===999?3:s.profitFactor;
+                  const pfScore=pf>=2.6?100:pf>=2.4?90:pf>=2.2?80:pf>=2.0?70:pf>=1.9?60:pf>=1.8?50:20;
+                  // 5. Recovery Factor (10%) — net profit / maxDD
+                  const rf=s.maxDD>0?(s.totalPnl/s.maxDD):s.totalPnl>0?4:0;
+                  const rfScore=rf>=3.5?100:rf>=3.0?80:rf>=2.5?65:rf>=2.0?55:rf>=1.5?40:rf>=1.0?15:0;
+                  // 6. Consistency (10%) — stddev of day P&Ls / total profit
+                  const dayPnls=Object.values(s.dayMap).map(d=>d.pnl);
+                  const dayAvg=dayPnls.length?dayPnls.reduce((a,b)=>a+b,0)/dayPnls.length:0;
+                  const dayStdDev=dayPnls.length>1?Math.sqrt(dayPnls.reduce((a,b)=>a+(b-dayAvg)**2,0)/dayPnls.length):0;
+                  const consistencyRaw=s.totalPnl>0&&dayAvg>0?(dayStdDev/s.totalPnl)*100:s.totalPnl<=0?100:0;
+                  const consistencyScore=Math.max(0,100-consistencyRaw);
+                  // 7. Plan Adherence bonus (replaces nothing — we blend it in)
+                  const planScore=Math.min(100,(s.followedPlanRate/70)*100);
+                  // Weighted total (weights sum to 100)
+                  const edgeScore=Math.round(
+                    wlScore*0.20+
+                    wrScore*0.15+
+                    ddScore*0.18+
+                    pfScore*0.22+
+                    rfScore*0.10+
+                    consistencyScore*0.08+
+                    planScore*0.07
+                  );
+                  const grade=edgeScore>=90?"S":edgeScore>=80?"A":edgeScore>=70?"B":edgeScore>=55?"C":edgeScore>=40?"D":"F";
+                  const gradeColor=edgeScore>=80?"#4ade80":edgeScore>=60?"#a3e635":edgeScore>=45?"#fbbf24":edgeScore>=30?"#fb923c":"#f87171";
+                  // SVG arc gauge
+                  const R=54,CX=70,CY=70,strokeW=8;
+                  const arcLen=Math.PI*R; // half circle
+                  const filled=(edgeScore/100)*arcLen;
+                  const pillars=[
+                    {label:"Profit Factor",score:pfScore,weight:"22%",color:"#a78bfa"},
+                    {label:"Win/Loss Ratio",score:wlScore,weight:"20%",color:"#38bdf8"},
+                    {label:"Max Drawdown",score:ddScore,weight:"18%",color:"#fb923c"},
+                    {label:"Win Rate",score:wrScore,weight:"15%",color:"#4ade80"},
+                    {label:"Recovery",score:rfScore,weight:"10%",color:"#f472b6"},
+                    {label:"Consistency",score:consistencyScore,weight:"8%",color:"#fbbf24"},
+                    {label:"Plan Adherence",score:planScore,weight:"7%",color:"#34d399"},
+                  ];
+                  return(
+                    <div className="card" style={{marginBottom:20,padding:"24px 28px",background:"rgba(10,16,24,0.7)",border:`1px solid ${gradeColor}22`,position:"relative",overflow:"hidden"}}>
+                      {/* subtle glow behind score */}
+                      <div style={{position:"absolute",top:-40,left:40,width:160,height:160,borderRadius:"50%",background:`radial-gradient(circle,${gradeColor}18 0%,transparent 70%)`,pointerEvents:"none"}}/>
+                      <div style={{display:"grid",gridTemplateColumns:"160px 1fr",gap:32,alignItems:"center"}}>
+                        {/* Gauge */}
+                        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+                          <svg width="140" height="85" viewBox="0 0 140 85">
+                            {/* track */}
+                            <path d={`M ${CX-R} ${CY} A ${R} ${R} 0 0 1 ${CX+R} ${CY}`} fill="none" stroke="rgba(148,163,184,0.08)" strokeWidth={strokeW} strokeLinecap="round"/>
+                            {/* filled arc */}
+                            <path d={`M ${CX-R} ${CY} A ${R} ${R} 0 0 1 ${CX+R} ${CY}`} fill="none" stroke={gradeColor} strokeWidth={strokeW} strokeLinecap="round"
+                              strokeDasharray={`${filled} ${arcLen}`} style={{filter:`drop-shadow(0 0 6px ${gradeColor}88)`,transition:"stroke-dasharray 0.6s ease"}}/>
+                            {/* score text */}
+                            <text x={CX} y={CY-4} textAnchor="middle" fontSize="28" fontWeight="700" fill={gradeColor} fontFamily="DM Mono,monospace">{edgeScore}</text>
+                            <text x={CX} y={CY+14} textAnchor="middle" fontSize="11" fill="#4a5568" fontFamily="DM Sans,sans-serif">/ 100</text>
+                            {/* grade badge */}
+                            <rect x={CX-13} y={CY+22} width={26} height={20} rx="5" fill={`${gradeColor}22`} stroke={`${gradeColor}44`} strokeWidth="1"/>
+                            <text x={CX} y={CY+36} textAnchor="middle" fontSize="12" fontWeight="700" fill={gradeColor} fontFamily="DM Mono,monospace">{grade}</text>
+                          </svg>
+                          <div style={{fontSize:11,fontWeight:700,color:"#475569",letterSpacing:"0.1em",textTransform:"uppercase"}}>NQ Edge Score</div>
+                          <div style={{fontSize:10,color:"#334155",textAlign:"center",lineHeight:1.5,maxWidth:130}}>
+                            {edgeScore>=80?"Elite performance":edgeScore>=65?"Strong edge":edgeScore>=50?"Developing edge":edgeScore>=35?"Needs work":"Focus on risk mgmt"}
+                          </div>
+                        </div>
+                        {/* Pillar bars */}
+                        <div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 24px"}}>
+                            {pillars.map(p=>(
+                              <div key={p.label}>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                                  <span style={{fontSize:11,color:"#4a5568",fontWeight:500}}>{p.label}</span>
+                                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                                    <span style={{fontSize:9,color:"#334155"}}>{p.weight}</span>
+                                    <span className="mono" style={{fontSize:12,fontWeight:600,color:p.score>=70?p.color:p.score>=40?"#fbbf24":"#f87171",minWidth:28,textAlign:"right"}}>{Math.round(p.score)}</span>
+                                  </div>
+                                </div>
+                                <div style={{height:4,background:"rgba(148,163,184,0.06)",borderRadius:2,overflow:"hidden"}}>
+                                  <div style={{width:`${p.score}%`,height:"100%",background:p.score>=70?p.color:p.score>=40?"#fbbf24":"#f87171",borderRadius:2,transition:"width 0.5s ease"}}/>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid rgba(148,163,184,0.06)",fontSize:10,color:"#334155",lineHeight:1.6}}>
+                            {edgeScore<50&&ddScore<50&&"⚠ Drawdown is your biggest drag — tighten stops. "}
+                            {edgeScore<50&&wrScore<50&&"📉 Win rate below 50% — be more selective with entries. "}
+                            {edgeScore>=70&&pfScore>=70&&"✅ Solid profit factor — your edge is real. "}
+                            {planScore<60&&"📋 Following your plan more consistently would boost your score. "}
+                            {edgeScore>=80&&"🔥 You're in the top tier. Keep compounding the process."}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Portfolio Summary */}
                 {(()=>{
                   const activeAccs=accountStats.filter(a=>!a.dormant);
