@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-
+ 
 const fmt$ = v => { const a = Math.abs(v); return (v < 0 ? "-$" : "$") + a.toFixed(2); };
 const OUTCOMES = ["Win","Loss","Breakeven"];
 const BIASES = ["Bullish","Bearish","Neutral"];
@@ -16,7 +16,7 @@ const TIME_SLOTS = [];
 for (let h=9;h<=10;h++) for (let m=0;m<60;m+=5) { if(h===10&&m>30)break; TIME_SLOTS.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`); }
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-
+ 
 const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", biasCorrect:null, entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, planBreakReason:"", beSaved:null, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], accountMultipliers:{}, confluences:[] };
 const PLAN_BREAK_REASONS = ["FOMO","Gambling","Revenge Trading","Over-Leveraging"];
 const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false, balanceAdjustment:"0" };
@@ -28,7 +28,7 @@ const TX_TYPES = [
   { value:"payout", label:"Payout / Withdrawal" },
 ];
 // accountStatus: "" | "passed" | "failed" | "payout_received"
-
+ 
 // ── IndexedDB helpers for large blobs (screenshots, aiReview) ──
 const DB_NAME="nq_edge_db", DB_VERSION=1, STORE_NAME="screenshots";
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=e=>e.target.result.createObjectStore(STORE_NAME);r.onsuccess=e=>res(e.target.result);r.onerror=e=>rej(e.target.error);});}
@@ -36,7 +36,7 @@ async function idbSet(key,value){try{const db=await openDB();return new Promise(
 async function idbGetAll(){try{const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE_NAME,"readonly");const store=tx.objectStore(STORE_NAME);const results={};store.openCursor().onsuccess=e=>{const c=e.target.result;if(c){results[c.key]=c.value;c.continue();}else res(results);};tx.onerror=()=>rej(tx.error);});}catch{return{};}}
 function stripBlobs(trades){return trades.map(t=>{const{screenshot,aiReview,...rest}=t;return rest;});}
 async function rehydrateScreenshots(trades,setTrades){const blobs=await idbGetAll();if(!Object.keys(blobs).length)return;setTrades(prev=>prev.map(t=>({...t,screenshot:blobs[`${t.id}_screenshot`]??t.screenshot??"",aiReview:blobs[`${t.id}_aiReview`]??t.aiReview??""  })));}
-
+ 
 function useStorage(key, fallback) {
   const [val, setVal] = useState(() => { try { const s=localStorage.getItem(key); return s?JSON.parse(s):fallback; } catch { return fallback; } });
   useEffect(() => {
@@ -51,7 +51,7 @@ function useStorage(key, fallback) {
   }, [key,val]);
   return [val, setVal];
 }
-
+ 
 async function callClaude(messages, systemPrompt, maxTokens=1000) {
   console.log("API KEY:", import.meta.env.VITE_ANTHROPIC_KEY?.slice(0,15));
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -62,12 +62,12 @@ async function callClaude(messages, systemPrompt, maxTokens=1000) {
   if(data.error) throw new Error(data.error.message||"API error");
   return data.content?.map(b=>b.text||"").join("")||"";
 }
-
+ 
 function calcCommission(asset, contracts) {
   const rate = COMMISSIONS[asset] || 0.52;
   return rate * contracts * 2;
 }
-
+ 
 function timeDiffMinutes(t1, t2) {
   if (!t1 || !t2) return null;
   const [h1,m1] = t1.split(":").map(Number);
@@ -75,20 +75,20 @@ function timeDiffMinutes(t1, t2) {
   const diff = (h2*60+m2) - (h1*60+m1);
   return diff > 0 ? diff : null;
 }
-
+ 
 function fmtDuration(mins) {
   if (mins === null || isNaN(mins)) return "—";
   if (mins < 60) return `${Math.round(mins)}m`;
   return `${Math.floor(mins/60)}h ${Math.round(mins%60)}m`;
 }
-
+ 
 const SEL_STYLE = {
   width:"100%", background:"rgba(15,23,35,0.5)", border:"1px solid rgba(148,163,184,0.08)",
   borderRadius:10, padding:"10px 14px", color:"#e2e8f0", fontSize:13,
   fontFamily:"'DM Sans',sans-serif", cursor:"pointer",
   appearance:"none", WebkitAppearance:"none", outline:"none", transition:"all 0.2s ease"
 };
-
+ 
 function Select({ value, onChange, options, style }) {
   return (
     <div style={{ position:"relative" }}>
@@ -101,7 +101,7 @@ function Select({ value, onChange, options, style }) {
     </div>
   );
 }
-
+ 
 function FirmInput({ value, onChange, firms }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState(value);
@@ -131,8 +131,8 @@ function FirmInput({ value, onChange, firms }) {
     </div>
   );
 }
-
-
+ 
+ 
 function AccountFilterDropdown({ accounts, selectedIds, onChange, label }) {
   const [open, setOpen] = useState(false);
   const ref = useRef();
@@ -176,7 +176,7 @@ function AccountFilterDropdown({ accounts, selectedIds, onChange, label }) {
     </div>
   );
 }
-
+ 
 function ConfluenceCheckboxes({ selected, onChange, confluences }) {
   const toggle = c => onChange(selected.includes(c) ? selected.filter(x=>x!==c) : [...selected,c]);
   return (
@@ -192,7 +192,7 @@ function ConfluenceCheckboxes({ selected, onChange, confluences }) {
     </div>
   );
 }
-
+ 
 function AccountCheckboxes({ accounts, selected, onChange, label }) {
   const toggle = id => onChange(selected.includes(id) ? selected.filter(x=>x!==id) : [...selected,id]);
   const active = accounts.filter(a=>!a.dormant);
@@ -225,7 +225,7 @@ function AccountCheckboxes({ accounts, selected, onChange, label }) {
     </div>
   );
 }
-
+ 
 function parseTradovateCSV(text) {
   const lines = text.trim().split("\n");
   const headers = lines[0].split(",").map(h=>h.replace(/"/g,"").trim());
@@ -270,7 +270,7 @@ function parseTradovateCSV(text) {
   if(tradeOrders.length>0)closeTrade(tradeOrders);
   return trades;
 }
-
+ 
 export default function App() {
   const [trades, setTrades] = useStorage("nq_trades_v8",[]);
   const [accounts, setAccounts] = useStorage("nq_accounts_v6",[]);
@@ -319,15 +319,15 @@ export default function App() {
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(null); // index or null
   const fileRef = useRef();
   const tvRef = useRef();
-
+ 
   const showToast = (msg,type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const saf = (k,v) => setAccountForm(f=>({...f,[k]:v}));
   const activeAccounts = useMemo(()=>accounts.filter(a=>showDormant||!a.dormant),[accounts,showDormant]);
-
+ 
   // Rehydrate screenshots/aiReview from IndexedDB on mount
   useEffect(()=>{ rehydrateScreenshots(trades,setTrades); },[]);
-
+ 
   useEffect(()=>{
     const pnl=parseFloat(form.pnl);
     const risk=parseFloat(form.risk)||250;
@@ -338,7 +338,7 @@ export default function App() {
       else setForm(f=>({...f,rr,outcome:"Loss"}));
     }
   },[form.pnl,form.risk]);
-
+ 
   const computeStats = useCallback((tradeList)=>{
     if(!tradeList.length)return null;
     const wins=tradeList.filter(t=>t.outcome==="Win");
@@ -432,7 +432,7 @@ export default function App() {
     const beSavedRate=beTotal?(beSavedCount/beTotal)*100:null;
     return{wins:wins.length,losses:losses.length,total:tradeList.length,totalPnl,winRate,avgWin,avgLoss,profitFactor,avgRR,equity,maxDD,followedPlanRate,dayMap,streak,winStreak,greenDayStreak,rrDist,rrHitRate,confMap,timeMap,longs:longs.length,shorts:shorts.length,longWR,shortWR,avgDuration,avgWinDuration,avgLossDuration,rrVsPotential,avgLeft,ratingMap,bestDay,worstDay,mostActiveDay,bestWRDay,dowMap,avgPoints,avgWinPoints,avgLossPoints,totalPoints,pointsDist,biasCorrectRate,planBreakMap,beTotal,beSavedCount,beSavedRate};
   },[confluences]);
-
+ 
   const stats=useMemo(()=>{
     const base=computeStats(trades.filter(t=>!t.excludeFromAnalytics));
     if(!base)return null;
@@ -465,7 +465,7 @@ export default function App() {
     const currentBalancePct=((currentBalanceAdj-startBal)/startBal)*100;
     return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj,adjustments:accAdjs,totalProfit,totalProfitPct,currentBalancePct};
   }),[accounts,trades,transactions,balanceAdjustments,computeStats]);
-
+ 
   const equityPath=useMemo(()=>{
     const src=overviewSelectedAccounts.length>0?(()=>{const selected=accountStats.filter(a=>overviewSelectedAccounts.includes(a.id));if(selected.length===1)return selected[0]?.stats?.equity||[];const allDates=[...new Set(selected.flatMap(a=>(a.stats?.equity||[]).map(e=>e.date)))].sort();let running=0;return allDates.map(d=>{const dayPnl=selected.reduce((s,a)=>{const eq=a.stats?.equity||[];const pt=eq.find(e=>e.date===d);const prevPts=eq.filter(e=>e.date<d);const prev=prevPts.length?prevPts[prevPts.length-1]:null;return s+(pt?pt.value-(prev?prev.value:0):0);},0);running+=dayPnl;return{date:d,value:running};});})():(stats?.equity||[]);
     if(!src.length)return"";
@@ -473,7 +473,7 @@ export default function App() {
     const minV=Math.min(0,...vals),maxV=Math.max(0,...vals),range=maxV-minV||1;
     return src.map((p,i)=>{const x=(i/(src.length-1||1))*400;const y=80-((p.value-minV)/range)*80;return`${i===0?"M":"L"}${x},${y}`;}).join(" ");
   },[stats,accountStats,overviewSelectedAccounts]);
-
+ 
   const calDayMap=useMemo(()=>{
     const map={};
     if(calSelectedAccounts.length>0){
@@ -503,13 +503,13 @@ export default function App() {
     }
     return map;
   },[trades,calSelectedAccounts]);
-
+ 
   const calDays=useMemo(()=>({first:new Date(calMonth.y,calMonth.m,1).getDay(),total:new Date(calMonth.y,calMonth.m+1,0).getDate()}),[calMonth]);
   const availableMonths=useMemo(()=>{const months=new Set(trades.map(t=>t.date?.substring(0,7)).filter(Boolean));return["All",...[...months].sort().reverse()];},[trades]);
   const filteredTrades=useMemo(()=>trades.filter(t=>(filterOutcome==="All"||t.outcome===filterOutcome)&&(filterAccount==="All"||(t.accountIds||[]).includes(filterAccount))&&(filterConfluence==="All"||(t.confluences||[]).includes(filterConfluence))&&(filterMonth==="All"||t.date?.startsWith(filterMonth))).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,filterOutcome,filterAccount,filterConfluence,filterMonth]);
   const galleryTrades=useMemo(()=>trades.filter(t=>t.screenshot&&(galleryFilter.outcome==="All"||t.outcome===galleryFilter.outcome)&&(galleryFilter.confluence==="All"||(t.confluences||[]).includes(galleryFilter.confluence))).sort((a,b)=>new Date(b.date)-new Date(a.date)),[trades,galleryFilter]);
   const financialsSummary=useMemo(()=>({totalExpenses:transactions.filter(isExpenseTx).reduce((s,t)=>s+(parseFloat(t.amount)||0),0),totalPayouts:transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0),net:transactions.filter(t=>t.type==="payout").reduce((s,t)=>s+(parseFloat(t.amount)||0),0)-transactions.filter(isExpenseTx).reduce((s,t)=>s+(parseFloat(t.amount)||0),0)}),[transactions]);
-
+ 
   // ─── PROP FIRM STATS ───
   const propFirmStats = useMemo(()=>{
     // Group transactions by account
@@ -586,7 +586,7 @@ export default function App() {
     });
     return { totalAccounts,passed,failed,payoutReceived,passRate,failRate,payoutRate,avgSpend,avgPayoutOnPass,avgSpendOnFail,evPerAttempt,totalSpent,totalPayouts,net:totalPayouts-totalSpent,accsWithTxs,firmMap:Object.values(firmMap),pUnresolved };
   },[accounts,transactions]);
-
+ 
   const handleScreenshot=useCallback(async(file)=>{
     if(!file)return;
     const reader=new FileReader();
@@ -605,7 +605,7 @@ export default function App() {
     };
     reader.readAsDataURL(file);
   },[confluences]);
-
+ 
   const runAiReview=async(trade)=>{
     setAiReviewLoading(true);
     const accs=accounts.filter(a=>(trade.accountIds||[]).includes(a.id));
@@ -618,14 +618,14 @@ export default function App() {
     }catch{showToast("Review failed","error");}
     setAiReviewLoading(false);
   };
-
+ 
   const exportCSV=()=>{
     const headers=["date","time","exitTime","asset","bias","entry","exit","stopLoss","takeProfit","contracts","outcome","pnl","rr","maxPotentialRR","risk","rating","emotion","followedPlan","confluences","notes","accountIds","accountMultipliers"];
     const rows=trades.map(t=>headers.map(h=>{const v=t[h]??"";return`"${Array.isArray(v)?v.join("|"):v.toString().replace(/"/g,'""')}"`}).join(","));
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([[headers.join(","),...rows].join("\n")],{type:"text/csv"}));a.download=`trading_journal_${new Date().toISOString().split("T")[0]}.csv`;a.click();
     showToast("CSV exported");
   };
-
+ 
   const handleTradovateFile=(file)=>{
     const reader=new FileReader();
     reader.onload=(e)=>{
@@ -637,7 +637,7 @@ export default function App() {
     };
     reader.readAsText(file);
   };
-
+ 
   const confirmTradovateImport=()=>{
     const selectedIds=Object.keys(importAccountMults).filter(id=>importAccountMults[id]>0);
     if(!importPreview||!selectedIds.length){showToast("Select at least one account","warn");return;}
@@ -647,14 +647,14 @@ export default function App() {
     setTrades(prev=>[...prev,...newTrades]);setShowImportModal(false);setImportPreview(null);
     showToast(`Imported ${newTrades.length} trades`);
   };
-
+ 
   const handleSubmit=()=>{
     if(!form.date||!form.entry)return;
     if(editIdx!==null){setTrades(prev=>prev.map((t,i)=>i===editIdx?{...form}:t));setEditIdx(null);}
     else setTrades(prev=>[...prev,{...form,id:Date.now()}]);
     setForm(EMPTY);setScreenshotPreview(null);setShowForm(false);showToast("Trade logged");
   };
-
+ 
   const handleAccountSubmit=()=>{
     if(!accountForm.name)return;
     const acc={...accountForm,id:accountForm.id||String(Date.now())};
@@ -663,7 +663,7 @@ export default function App() {
     else setAccounts(prev=>[...prev,acc]);
     setAccountForm(EMPTY_ACCOUNT);setShowAccountForm(false);showToast("Account saved");
   };
-
+ 
   const toggleDormant=(idx)=>{setAccounts(prev=>prev.map((a,i)=>i===idx?{...a,dormant:!a.dormant}:a));showToast(accounts[idx].dormant?"Account reactivated":"Account set to dormant");};
   const openEdit=(idx)=>{setEditIdx(idx);setForm({...EMPTY,...trades[idx],accountIds:trades[idx].accountIds||[],accountMultipliers:trades[idx].accountMultipliers||{},confluences:trades[idx].confluences||[]});setScreenshotPreview(trades[idx].screenshot||null);setShowForm(true);};
   const deleteTrade=(idx)=>{setTrades(prev=>prev.filter((_,i)=>i!==idx));showToast("Trade deleted","warn");};
@@ -675,7 +675,7 @@ export default function App() {
     setAdjustmentForm(EMPTY_ADJUSTMENT);showToast("Adjustment submitted");
   };
   const deleteAdjustment=(adjId)=>{setBalanceAdjustments(prev=>prev.filter(a=>a.id!==adjId));showToast("Adjustment removed","warn");};
-
+ 
   const activeStats=useMemo(()=>{
     if(overviewSelectedAccounts.length===0)return stats;
     if(overviewSelectedAccounts.length===1){const found=accountStats.find(a=>a.id===overviewSelectedAccounts[0]);return found?.stats||stats;}
@@ -683,7 +683,7 @@ export default function App() {
     return computeStats(selectedTrades);
   },[overviewSelectedAccounts,accountStats,stats,trades,computeStats]);
   const ratingColor=r=>({"A+":"#4ade80","A":"#4ade80","A-":"#86efac","B+":"#f0b429","B":"#f0b429","B-":"#fcd34d","C":"#f87171"}[r]||"#e2e8f0");
-
+ 
   const ANALYTICS_SECTIONS=[
     {id:"rr",label:"R:R Distribution"},
     {id:"hitrate",label:"Cumulative Hit Rate"},
@@ -699,11 +699,11 @@ export default function App() {
     {id:"propfirm",label:"Prop Firm Stats"},
     {id:"aicoach",label:"✦ AI Coach"},
   ];
-
+ 
   // Shared input style
   const inp={width:"100%",background:"rgba(15,23,35,0.5)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:10,padding:"10px 14px",color:"#e2e8f0",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",boxSizing:"border-box",transition:"all 0.2s ease"};
   const lbl={display:"block",color:"#64748b",fontSize:11,marginBottom:7,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",fontWeight:600};
-
+ 
   return (
     <div className={hideValues?"hide-values":""} style={{fontFamily:"'DM Sans','Inter',sans-serif",background:"transparent",minHeight:"100vh",color:"#e2e8f0",width:"100%"}}>
       <style>{`
@@ -715,41 +715,41 @@ export default function App() {
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.12);border-radius:6px}
         ::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,0.2)}
-
+ 
         .card{background:rgba(15,23,35,0.6);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(148,163,184,0.08);border-radius:16px;padding:24px;transition:all 0.25s ease;box-shadow:0 4px 24px rgba(0,0,0,0.15)}
         .card:hover{border-color:rgba(14,165,233,0.15);box-shadow:0 8px 32px rgba(0,0,0,0.2),0 0 0 1px rgba(14,165,233,0.05)}
-
+ 
         .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;border-radius:10px;font-size:12px;font-weight:600;letter-spacing:0.03em;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all 0.2s ease;white-space:nowrap}
         .btn-primary{background:linear-gradient(135deg,#0ea5e9,#06b6d4);color:#fff;box-shadow:0 2px 12px rgba(14,165,233,0.25)}.btn-primary:hover{box-shadow:0 4px 20px rgba(14,165,233,0.4);transform:translateY(-1px)}
         .btn-ghost{background:rgba(148,163,184,0.04);color:#64748b;border:1px solid rgba(148,163,184,0.1)}.btn-ghost:hover{color:#cbd5e1;border-color:rgba(148,163,184,0.2);background:rgba(148,163,184,0.08)}
         .btn-danger{background:rgba(248,113,113,0.06);color:#f87171;border:1px solid rgba(248,113,113,0.12)}.btn-danger:hover{background:rgba(248,113,113,0.12);border-color:rgba(248,113,113,0.25)}
         .btn-success{background:rgba(34,197,94,0.08);color:#4ade80;border:1px solid rgba(74,222,128,0.15)}.btn-success:hover{background:rgba(34,197,94,0.14)}
         .btn-sm{padding:6px 13px;font-size:11px;border-radius:8px}
-
+ 
         .overlay{position:fixed;inset:0;background:rgba(2,5,10,0.8);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto}
         .modal{background:rgba(12,18,28,0.95);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(148,163,184,0.1);border-radius:20px;width:100%;max-width:860px;padding:36px;margin:auto;box-shadow:0 32px 80px rgba(0,0,0,0.5),0 0 0 1px rgba(14,165,233,0.04)}
-
+ 
         .dz{border:1.5px dashed rgba(14,165,233,0.2);border-radius:14px;padding:32px;text-align:center;cursor:pointer;transition:all 0.25s;background:rgba(14,165,233,0.02)}
         .dz:hover{border-color:rgba(14,165,233,0.4);background:rgba(14,165,233,0.05);box-shadow:0 0 24px rgba(14,165,233,0.06)}
-
+ 
         .toast{position:fixed;bottom:28px;right:28px;padding:13px 22px;border-radius:12px;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:500;z-index:999;animation:slideup 0.3s cubic-bezier(0.16,1,0.3,1);box-shadow:0 12px 40px rgba(0,0,0,0.4);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
         @keyframes slideup{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
-
+ 
         .nav-tab{padding:8px 16px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s ease;letter-spacing:0.03em;border:none;font-family:'DM Sans',sans-serif}
         .nav-active{background:rgba(14,165,233,0.1);color:#e2e8f0;box-shadow:0 0 12px rgba(14,165,233,0.08)}
         .nav-inactive{background:transparent;color:#475569}.nav-inactive:hover{color:#94a3b8;background:rgba(148,163,184,0.04)}
-
+ 
         .stat-card{background:rgba(15,23,35,0.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(148,163,184,0.06);border-radius:14px;padding:22px 24px;transition:all 0.25s ease}
         .stat-card:hover{border-color:rgba(14,165,233,0.12);box-shadow:0 4px 20px rgba(0,0,0,0.15)}
-
+ 
         .mono{font-family:'DM Mono',monospace}
         .hide-values .mono{filter:blur(7px);user-select:none;transition:filter 0.2s ease}
         .hide-values .mono:hover{filter:blur(0px)}
-
+ 
         .analytics-nav-item{padding:10px 16px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.2s ease;margin-bottom:4px;font-family:'DM Sans',sans-serif}
         .analytics-nav-active{background:rgba(14,165,233,0.1);color:#e2e8f0}
         .analytics-nav-inactive{color:#475569}.analytics-nav-inactive:hover{color:#94a3b8;background:rgba(148,163,184,0.04)}
-
+ 
         .tag{display:inline-flex;align-items:center;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500;background:rgba(14,165,233,0.08);color:#7dd3fc;border:1px solid rgba(14,165,233,0.12)}
         .outcome-win{color:#4ade80}.outcome-loss{color:#f87171}.outcome-be{color:#fbbf24}
         .bar-bg{background:rgba(148,163,184,0.06);border-radius:4px;height:4px;overflow:hidden}
@@ -767,13 +767,13 @@ export default function App() {
         .sep{border:none;border-top:1px solid rgba(148,163,184,0.06);margin:0}
         .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:0.05em}
       `}</style>
-
+ 
       {toast&&<div className="toast" style={{
         background:toast.type==="error"?"rgba(18,10,10,0.9)":toast.type==="warn"?"rgba(18,16,10,0.9)":"rgba(10,18,14,0.9)",
         border:`1px solid ${toast.type==="error"?"rgba(248,113,113,0.2)":toast.type==="warn"?"rgba(251,191,36,0.2)":"rgba(74,222,128,0.2)"}`,
         color:toast.type==="error"?"#f87171":toast.type==="warn"?"#fbbf24":"#4ade80"
       }}>{toast.msg}</div>}
-
+ 
       {/* NAV */}
       <div style={{borderBottom:"1px solid rgba(148,163,184,0.06)",padding:"0 32px",background:"rgba(5,10,16,0.8)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",position:"sticky",top:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:64}}>
@@ -814,9 +814,9 @@ export default function App() {
           </div>
         </div>
       </div>
-
+ 
       <div style={{padding:"32px 36px",maxWidth:1400,margin:"0 auto"}}>
-
+ 
         {/* ─── DASHBOARD ─── */}
         {view==="dashboard"&&(
           <div>
@@ -827,7 +827,7 @@ export default function App() {
               </div>
               <AccountFilterDropdown accounts={activeAccounts} selectedIds={overviewSelectedAccounts} onChange={setOverviewSelectedAccounts} />
             </div>
-
+ 
             {!trades.length?(
               <div style={{textAlign:"center",padding:"100px 0"}}>
                 <div style={{width:56,height:56,borderRadius:14,background:"rgba(15,23,35,0.4)",border:"1px solid rgba(148,163,184,0.08)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
@@ -863,7 +863,7 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-
+ 
                 {/* Portfolio Summary */}
                 {(()=>{
                   const activeAccs=accountStats.filter(a=>!a.dormant);
@@ -898,7 +898,7 @@ export default function App() {
                     </div>
                   );
                 })()}
-
+ 
                 {/* Equity + Accounts */}
                 <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:16,marginBottom:20}}>
                   <div className="card">
@@ -937,7 +937,7 @@ export default function App() {
                     ))}
                   </div>
                 </div>
-
+ 
                 {/* Calendar */}
                 <div className="card">
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
@@ -951,7 +951,7 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-
+ 
                   {(()=>{
                     const mt=Object.entries(calDayMap).filter(([date])=>{ const [y,m]=date.split("-").map(Number); return y===calMonth.y&&m-1===calMonth.m; });
                     const mPnl=mt.reduce((s,[,d])=>s+d.pnl,0);
@@ -970,7 +970,7 @@ export default function App() {
                       </div>
                     );
                   })()}
-
+ 
                   <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
                     {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=>(
                       <div key={d} style={{textAlign:"center",fontSize:11,color:"#2d3a4a",padding:"6px 0",fontWeight:600}}>{d}</div>
@@ -1011,7 +1011,7 @@ export default function App() {
             )}
           </div>
         )}
-
+ 
         {/* ─── ACCOUNTS ─── */}
         {view==="accounts"&&(
           <div>
@@ -1088,7 +1088,7 @@ export default function App() {
             )}
           </div>
         )}
-
+ 
         {/* ─── JOURNAL ─── */}
         {view==="journal"&&(
           <div>
@@ -1161,7 +1161,7 @@ export default function App() {
             </div>
           </div>
         )}
-
+ 
         {/* ─── ANALYTICS ─── */}
         {view==="analytics"&&(
           <div>
@@ -1521,7 +1521,7 @@ export default function App() {
                           </div>
                         ))}
                       </div>
-
+ 
                       {/* EV section */}
                       <div className="card">
                         <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Expected Value per Account Attempt</div>
@@ -1552,7 +1552,7 @@ export default function App() {
                         </div>
                         {propFirmStats.pUnresolved>0.05&&<div style={{marginTop:10,fontSize:12,color:"#fbbf24",background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.15)",borderRadius:7,padding:"10px 14px"}}>⚠ {(propFirmStats.pUnresolved*100).toFixed(0)}% of accounts have no pass/fail outcome tagged yet — EV may be understated. Edit transactions in the Financials tab to add outcomes.</div>}
                       </div>
-
+ 
                       {/* Total financials */}
                       <div className="card">
                         <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:16}}>Real Money Summary</div>
@@ -1565,7 +1565,7 @@ export default function App() {
                           ))}
                         </div>
                       </div>
-
+ 
                       {/* Per-account breakdown */}
                       {propFirmStats.accsWithTxs.length>0&&(
                         <div className="card">
@@ -1593,7 +1593,7 @@ export default function App() {
                           </div>
                         </div>
                       )}
-
+ 
                       {/* By firm */}
                       {propFirmStats.firmMap.length>0&&(
                         <div className="card">
@@ -1622,11 +1622,11 @@ export default function App() {
                           </div>
                         </div>
                       )}
-
+ 
                       {!propFirmStats.totalAccounts&&<div style={{textAlign:"center",padding:"60px 0",color:"#334155",fontSize:13}}>No account-linked transactions yet — go to Financials and log transactions with accounts, then set pass/fail outcomes.</div>}
                     </div>
                   )}
-
+ 
                   {/* ─── AI COACH ─── */}
                   {analyticsSection==="aicoach"&&(
                     <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -1639,7 +1639,7 @@ export default function App() {
                             <button key={m} onClick={()=>{setCoachMode(m);setCoachReport("");}} style={{padding:"10px 20px",borderRadius:10,border:`1px solid ${coachMode===m?"rgba(14,165,233,0.5)":"rgba(148,163,184,0.1)"}`,background:coachMode===m?"rgba(14,165,233,0.12)":"rgba(15,23,35,0.5)",color:coachMode===m?"#38bdf8":"#64748b",fontSize:13,fontWeight:500,cursor:"pointer",transition:"all 0.2s"}}>{label}</button>
                           ))}
                         </div>
-
+ 
                         {coachMode==="performance"&&(
                           <div>
                             <div style={{marginBottom:14}}>
@@ -1666,7 +1666,7 @@ export default function App() {
                                 const ratingBreakdown=Object.entries(s.ratingMap).filter(([,v])=>v.count>0).map(([r,v])=>`${r}: ${v.count} trades, ${v.wins}W/${v.losses}L, PnL ${fmt$(v.pnl)}`).join("\n");
                                 const planBreaks=Object.entries(s.planBreakMap).filter(([,v])=>v>0).map(([r,v])=>`${r}: ${v}x`).join(", ")||"None";
                                 const prompt=`You are an expert NQ futures trading coach. Analyze this trader's performance data and give a structured, honest, specific report.
-
+ 
 PERFORMANCE DATA (${coachDateRange==="all"?"All Time":coachDateRange==="today"?"Today":coachDateRange==="7d"?"Last 7 Days":"Last 30 Days"} — ${filtered.length} trades):
 Win Rate: ${s.winRate.toFixed(1)}% | Profit Factor: ${s.profitFactor.toFixed(2)} | Total P&L: ${fmt$(s.totalPnl)}
 Avg Win: ${fmt$(s.avgWin)} | Avg Loss: ${fmt$(s.avgLoss)} | Avg R:R: ${s.avgRR.toFixed(2)}R
@@ -1682,7 +1682,7 @@ Emotion breakdown:\n${emotionBreakdown||"N/A"}
 Trade ratings breakdown:\n${ratingBreakdown||"N/A"}
 Plan breaks: ${planBreaks}
 Plan break reasons: ${planBreaks}
-
+ 
 Write a structured performance report with these exact sections:
 ## What You're Doing Well
 ## What's Hurting Your Performance
@@ -1699,7 +1699,7 @@ Be specific and data-driven. Reference actual numbers. No generic advice. Under 
                             </button>
                           </div>
                         )}
-
+ 
                         {coachMode==="recap"&&(
                           <div>
                             <div style={{marginBottom:14}}>
@@ -1721,7 +1721,7 @@ Be specific and data-driven. Reference actual numbers. No generic advice. Under 
                                 const similarTrades=trades.filter(x=>x.id!==t.id&&!x.excludeFromAnalytics&&x.asset===t.asset&&x.bias===t.bias).slice(0,20);
                                 const simWR=similarTrades.length?(similarTrades.filter(x=>x.outcome==="Win").length/similarTrades.filter(x=>x.outcome!=="Breakeven").length*100):null;
                                 const prompt=`You are an expert NQ futures trading coach. Give a detailed, honest recap of this specific trade.
-
+ 
 TRADE DETAILS:
 Date: ${t.date} | Entry Time: ${t.time||"?"} → Exit: ${t.exitTime||"?"}
 Asset: ${t.asset||"MNQ"} | Direction: ${t.bias} | Bias Correct: ${t.biasCorrect===true?"Yes":t.biasCorrect===false?"No":"Not recorded"}
@@ -1733,12 +1733,12 @@ Emotion: ${t.emotion||"?"} | Followed Plan: ${t.followedPlan?"Yes":"No"}${!t.fol
 Trade Rating: ${t.rating||"Not rated"} | Breakeven saved: ${t.beSaved===true?"Yes":t.beSaved===false?"No":"N/A"}
 Notes: ${t.notes||"None"}
 Account(s): ${accs.map(a=>a.name).join(", ")||"Not linked"}
-
+ 
 CONTEXT FROM OVERALL STATS:
 Overall Win Rate: ${allStats?allStats.winRate.toFixed(1)+"%":"N/A"}
 ${t.asset} ${t.bias} trades (similar): ${similarTrades.length} trades, ${simWR!==null?simWR.toFixed(1)+"%":"?"} WR
 Avg R left on table overall: ${allStats?allStats.avgLeft.toFixed(2)+"R":"N/A"}
-
+ 
 Write a structured trade recap with these exact sections:
 ## Trade Summary
 ## Execution Analysis
@@ -1757,7 +1757,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
                           </div>
                         )}
                       </div>
-
+ 
                       {/* Report output */}
                       {coachLoading&&(
                         <div className="card" style={{padding:32,textAlign:"center"}}>
@@ -1789,7 +1789,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
             )}
           </div>
         )}
-
+ 
         {/* ─── SCREENSHOTS ─── */}
         {view==="screenshots"&&(
           <div>
@@ -1838,7 +1838,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
             )}
           </div>
         )}
-
+ 
         {/* ─── FINANCIALS ─── */}
         {view==="financials"&&(
           <div>
@@ -1936,7 +1936,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
           </div>
         )}
       </div>
-
+ 
       {/* ─── EXPANDED SCREENSHOT ─── */}
       {expandedScreenshot&&(
         <div className="overlay" onClick={()=>setExpandedScreenshot(null)}>
@@ -1960,7 +1960,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
           </div>
         </div>
       )}
-
+ 
       {/* ─── CONFLUENCE MANAGER ─── */}
       {showConfluenceManager&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowConfluenceManager(false);}}>
@@ -1984,7 +1984,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
           </div>
         </div>
       )}
-
+ 
       {/* ─── ACCOUNT FORM ─── */}
       {showAccountForm&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget){setShowAccountForm(false);setEditAccountIdx(null);}}}>
@@ -2043,7 +2043,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
           </div>
         </div>
       )}
-
+ 
       {/* ─── CONFIRM DELETE ACCOUNT ─── */}
       {confirmDeleteAccount!==null&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setConfirmDeleteAccount(null);}}>
@@ -2057,7 +2057,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
           </div>
         </div>
       )}
-
+ 
       {/* ─── LOG TRADE FORM ─── */}
       {showForm&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget){setShowForm(false);setEditIdx(null);}}}>
@@ -2066,7 +2066,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
               <div style={{fontSize:16,fontWeight:600,color:"#e2e8f0"}}>{editIdx!==null?"Edit Trade":"Log Trade"}</div>
               <button onClick={()=>{setShowForm(false);setEditIdx(null);}} style={{background:"none",border:"none",color:"#4a5568",fontSize:20,cursor:"pointer"}}>✕</button>
             </div>
-
+ 
             {/* Screenshot drop zone */}
             <div className="dz" style={{marginBottom:18}} onClick={()=>!aiLoading&&fileRef.current?.click()}
               onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor="#3b82f6";}}
@@ -2088,7 +2088,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
               )}
               <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>e.target.files[0]&&handleScreenshot(e.target.files[0])}/>
             </div>
-
+ 
             <div style={{marginBottom:16}}>
               <div style={{fontSize:11,color:"#4a5568",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>Accounts</div>
               {activeAccounts.sort((a,b)=>a.name.localeCompare(b.name)).map(a=>{
@@ -2120,7 +2120,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
                 );
               })}
             </div>
-
+ 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div><label style={lbl}>Asset</label><Select value={form.asset||"MNQ"} onChange={e=>sf("asset",e.target.value)} options={ASSETS}/></div>
               <div><label style={lbl}>Trade Rating</label><Select value={form.rating||""} onChange={e=>sf("rating",e.target.value)} options={[{value:"",label:"— Unrated —"},...TRADE_RATINGS]}/></div>
@@ -2144,7 +2144,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
                 <div key={k}><label style={lbl}>{l}</label><Select value={form[k]} onChange={e=>sf(k,e.target.value)} options={opts}/></div>
               ))}
             </div>
-
+ 
             <div style={{marginTop:14}}>
               <label style={{...lbl,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <span>Confluences ({(form.confluences||[]).length} selected)</span>
@@ -2152,9 +2152,9 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
               </label>
               <ConfluenceCheckboxes selected={form.confluences||[]} onChange={v=>sf("confluences",v)} confluences={confluences}/>
             </div>
-
+ 
             <div style={{marginTop:14}}><label style={lbl}>Notes</label><textarea value={form.notes} onChange={e=>sf("notes",e.target.value)} style={{...inp,minHeight:70,resize:"vertical",lineHeight:1.6}} placeholder="IFVG formed during NY open, entered on retest..."/></div>
-
+ 
             <div style={{marginTop:12,display:"flex",alignItems:"center",gap:10}}>
               <input type="checkbox" id="fp" checked={form.followedPlan} onChange={e=>sf("followedPlan",e.target.checked)} style={{accentColor:"#0ea5e9",width:14,height:14,cursor:"pointer"}}/>
               <label htmlFor="fp" style={{fontSize:12,color:"#4a5568",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Followed trading plan</label>
@@ -2181,12 +2181,12 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
                 <label htmlFor="bes" style={{fontSize:12,color:"#fbbf24",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Did the break-even save me?</label>
               </div>
             )}
-
+ 
             <div style={{marginTop:10,display:"flex",alignItems:"center",gap:10}}>
               <input type="checkbox" id="efa" checked={form.excludeFromAnalytics||false} onChange={e=>sf("excludeFromAnalytics",e.target.checked)} style={{accentColor:"#f87171",width:14,height:14,cursor:"pointer"}}/>
               <label htmlFor="efa" style={{fontSize:12,color:"#4a5568",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Exclude from analytics</label>
             </div>
-
+ 
             <div style={{display:"flex",gap:8,marginTop:24}}>
               <button onClick={handleSubmit} className="btn btn-primary" style={{flex:1,padding:11,fontSize:13}}>{editIdx!==null?"Update Trade":"Log Trade"}</button>
               <button onClick={()=>{setShowForm(false);setEditIdx(null);}} className="btn btn-ghost" style={{padding:"11px 22px",fontSize:13}}>Cancel</button>
@@ -2194,7 +2194,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
           </div>
         </div>
       )}
-
+ 
       {/* ─── IMPORT MODAL ─── */}
       {showImportModal&&importPreview&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowImportModal(false);}}>
@@ -2281,3 +2281,4 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
     </div>
   );
 }
+ 
