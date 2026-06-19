@@ -317,6 +317,7 @@ export default function App() {
   const [adjustmentForm, setAdjustmentForm] = useState(EMPTY_ADJUSTMENT);
   const [showAdjustmentForm, setShowAdjustmentForm] = useState(null); // accountId or null
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(null); // index or null
+  const [accountsCompact, setAccountsCompact] = useState(false);
   const fileRef = useRef();
   const tvRef = useRef();
 
@@ -364,7 +365,7 @@ export default function App() {
     const winStreak=streak>0?streak:0;
     const sortedDays=Object.entries(dayMap).sort((a,b)=>b[0].localeCompare(a[0]));
     let greenDayStreak=0;
-    for(const [,d] of sortedDays){const beThresh=(d.maxAccounts||1)*50;if(d.pnl>0||Math.abs(d.pnl)<=beThresh)greenDayStreak++;else break;}
+    for(const [,d] of sortedDays){if(d.pnl>0)greenDayStreak++;else break;}
     const rrDist={};
     RR_BUCKETS.forEach(b=>rrDist[b]={count:0,wins:0,losses:0});
     tradeList.filter(t=>t.rr).forEach(t=>{
@@ -855,7 +856,7 @@ export default function App() {
                     {l:"Trades",v:activeStats?.total||0,c:"#e2e8f0"},
                     {l:"Plan %",v:`${(activeStats?.followedPlanRate||0).toFixed(0)}%`,c:(activeStats?.followedPlanRate||0)>=70?"#4ade80":"#fbbf24"},
                     {l:"Win Streak",v:(activeStats?.winStreak||0)>0?`${activeStats.winStreak}W`:"—",c:(activeStats?.winStreak||0)>0?"#4ade80":"#4a5568"},
-                    {l:"Green Days",v:(activeStats?.greenDayStreak||0)>0?`${activeStats.greenDayStreak}D`:"—",c:(activeStats?.greenDayStreak||0)>0?"#4ade80":"#4a5568"}
+                    {l:"Green Streak",v:(activeStats?.greenDayStreak||0)>0?`${activeStats.greenDayStreak}D`:"—",c:(activeStats?.greenDayStreak||0)>0?"#4ade80":"#4a5568"}
                   ].map(s=>(
                     <div key={s.l} className="stat-card">
                       <div style={{fontSize:10,color:"#475569",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600,marginBottom:10}}>{s.l}</div>
@@ -1083,6 +1084,9 @@ export default function App() {
                 <div className="page-sub">{activeAccounts.length} active · {accounts.filter(a=>a.dormant).length} dormant</div>
               </div>
               <div style={{display:"flex",gap:8}}>
+                <button className={`btn btn-ghost btn-sm`} onClick={()=>setAccountsCompact(p=>!p)} style={{color:accountsCompact?"#7dd3fc":"#64748b",borderColor:accountsCompact?"rgba(14,165,233,0.3)":"undefined",background:accountsCompact?"rgba(14,165,233,0.06)":"undefined"}}>
+                  {accountsCompact?"⊞ Full View":"⊟ Compact"}
+                </button>
                 <button className={`btn btn-ghost btn-sm`} onClick={()=>setShowDormant(p=>!p)}>{showDormant?"Hide Dormant":"Show Dormant"}</button>
                 <button className="btn btn-primary btn-sm" onClick={()=>{setEditAccountIdx(null);setAccountForm(EMPTY_ACCOUNT);setShowAccountForm(true);}}>+ Add Account</button>
               </div>
@@ -1091,6 +1095,26 @@ export default function App() {
               <div style={{textAlign:"center",padding:"80px 0"}}>
                 <div style={{fontSize:14,color:"#4a5568",marginBottom:20}}>No accounts added yet</div>
                 <button className="btn btn-primary" onClick={()=>setShowAccountForm(true)} style={{padding:"10px 24px"}}>Add First Account</button>
+              </div>
+            ):accountsCompact?(
+              <div className="card" style={{padding:0,overflow:"hidden"}}>
+                {accountStats.filter(a=>showDormant||!a.dormant).sort((a,b)=>a.name.localeCompare(b.name)).map((a,i,arr)=>{
+                  return(
+                    <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderBottom:i<arr.length-1?"1px solid rgba(148,163,184,0.06)":"none",opacity:a.dormant?0.5:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{width:8,height:8,borderRadius:"50%",background:a.currentBalancePct>=0?"#4ade80":"#f87171",flexShrink:0}}/>
+                        <div>
+                          <div style={{fontSize:14,fontWeight:600,color:a.dormant?"#4a5568":"#e2e8f0"}}>{a.name}</div>
+                          <div style={{fontSize:11,color:"#4a5568"}}>{a.firm}{a.dormant?" · Dormant":""}</div>
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <div className="mono" style={{fontSize:18,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
+                        <div style={{fontSize:11,color:a.currentBalancePct>=0?"#4ade80":"#f87171",marginTop:1}}>{a.currentBalancePct>=0?"+":""}{a.currentBalancePct.toFixed(2)}%</div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ):(
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
@@ -2001,6 +2025,7 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
         {/* ─── PAYOUTS ─── */}
         {view==="payouts"&&(()=>{
           const payoutTxs=[...transactions].filter(t=>t.type==="payout").sort((a,b)=>new Date(b.date)-new Date(a.date));
+          const expenseTxs=[...transactions].filter(t=>isExpenseTx(t)).sort((a,b)=>new Date(a.date)-new Date(b.date));
           const totalPaid=transactions.filter(t=>t.type==="challenge_fee"||t.type==="activation_fee").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
           const totalOut=payoutTxs.reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
           const net=totalOut-totalPaid;
@@ -2015,6 +2040,33 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
           payoutTxs.forEach(t=>{const ym=t.date?.substring(0,7)||"";if(!byMonth[ym])byMonth[ym]=0;byMonth[ym]+=parseFloat(t.amount)||0;});
           const monthList=Object.entries(byMonth).sort((a,b)=>a[0].localeCompare(b[0]));
           const maxMonthPayout=monthList.length?Math.max(...monthList.map(([,v])=>v)):1;
+
+          // Build cumulative chart data — merge all txs sorted by date
+          const allTxsSorted=[...transactions].sort((a,b)=>new Date(a.date)-new Date(b.date)||a.id-b.id);
+          let cumPayout=0,cumExpense=0;
+          const chartPoints=[];
+          allTxsSorted.forEach(tx=>{
+            const amt=parseFloat(tx.amount)||0;
+            if(tx.type==="payout")cumPayout+=amt;
+            else if(isExpenseTx(tx))cumExpense+=amt;
+            chartPoints.push({date:tx.date,payout:cumPayout,expense:cumExpense,net:cumPayout-cumExpense,type:tx.type==="payout"?"payout":"expense"});
+          });
+          // SVG chart dimensions
+          const W=560,H=180,PAD={t:16,r:16,b:28,l:52};
+          const cW=W-PAD.l-PAD.r,cH=H-PAD.t-PAD.b;
+          const allVals=chartPoints.flatMap(p=>[p.payout,p.expense,p.net]);
+          const minV=Math.min(0,...allVals),maxV=Math.max(0,...allVals);
+          const range=maxV-minV||1;
+          const xS=i=>(i/(chartPoints.length-1||1))*cW+PAD.l;
+          const yS=v=>H-PAD.b-((v-minV)/range)*cH;
+          const toPath=getter=>chartPoints.map((p,i)=>`${i===0?"M":"L"}${xS(i).toFixed(1)},${yS(getter(p)).toFixed(1)}`).join(" ");
+          const payoutPath=chartPoints.length>1?toPath(p=>p.payout):"";
+          const expensePath=chartPoints.length>1?toPath(p=>p.expense):"";
+          const netPath=chartPoints.length>1?toPath(p=>p.net):"";
+          // Y axis ticks
+          const yTicks=4;
+          const tickVals=Array.from({length:yTicks+1},(_,i)=>minV+(range/yTicks)*i);
+
           return(
             <div>
               <div style={{marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
@@ -2042,15 +2094,87 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
                 ))}
               </div>
 
-              {!payoutTxs.length?(
+              {!payoutTxs.length&&!expenseTxs.length?(
                 <div className="card" style={{textAlign:"center",padding:"60px 0"}}>
                   <div style={{fontSize:40,marginBottom:16}}>🏦</div>
-                  <div style={{fontSize:16,fontWeight:600,color:"#e2e8f0",marginBottom:8}}>No payouts yet</div>
-                  <div style={{fontSize:13,color:"#4a5568",marginBottom:24}}>Log a payout in the Financials tab when you withdraw from a prop firm</div>
+                  <div style={{fontSize:16,fontWeight:600,color:"#e2e8f0",marginBottom:8}}>No transactions yet</div>
+                  <div style={{fontSize:13,color:"#4a5568",marginBottom:24}}>Log fees and payouts in the Financials tab to start tracking</div>
                   <button className="btn btn-primary" onClick={()=>setView("financials")}>Go to Financials</button>
                 </div>
               ):(
                 <>
+                  {/* Cumulative P&L Chart */}
+                  {chartPoints.length>1&&(
+                    <div className="card" style={{marginBottom:16}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+                        <div>
+                          <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Cumulative P&L Track</div>
+                          <div style={{fontSize:12,color:"#4a5568"}}>How your payouts, expenses and net have grown over time</div>
+                        </div>
+                        <div style={{display:"flex",gap:16,alignItems:"center"}}>
+                          {[["#4ade80","Payouts"],["#f87171","Expenses"],[net>=0?"#e2e8f0":"#fbbf24","Net"]].map(([c,l])=>(
+                            <div key={l} style={{display:"flex",gap:5,alignItems:"center"}}>
+                              <div style={{width:20,height:2,background:c,borderRadius:2}}/>
+                              <span style={{fontSize:11,color:"#4a5568"}}>{l}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{display:"block",overflow:"visible"}}>
+                        <defs>
+                          <linearGradient id="pgrd" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#4ade80" stopOpacity="0.18"/>
+                            <stop offset="100%" stopColor="#4ade80" stopOpacity="0"/>
+                          </linearGradient>
+                          <linearGradient id="egrd" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#f87171" stopOpacity="0.14"/>
+                            <stop offset="100%" stopColor="#f87171" stopOpacity="0"/>
+                          </linearGradient>
+                        </defs>
+                        {/* grid lines */}
+                        {tickVals.map((v,i)=>(
+                          <g key={i}>
+                            <line x1={PAD.l} y1={yS(v)} x2={W-PAD.r} y2={yS(v)} stroke="rgba(148,163,184,0.06)" strokeWidth="1"/>
+                            <text x={PAD.l-6} y={yS(v)+4} textAnchor="end" fontSize="9" fill="#334155" fontFamily="DM Mono,monospace">{v>=0?`$${(v/1000).toFixed(0)}k`:`-$${(Math.abs(v)/1000).toFixed(0)}k`}</text>
+                          </g>
+                        ))}
+                        {/* zero line */}
+                        {minV<0&&<line x1={PAD.l} y1={yS(0)} x2={W-PAD.r} y2={yS(0)} stroke="rgba(148,163,184,0.15)" strokeWidth="1" strokeDasharray="4 3"/>}
+                        {/* filled areas */}
+                        {payoutPath&&<path d={`${payoutPath} L${xS(chartPoints.length-1)},${H-PAD.b} L${PAD.l},${H-PAD.b} Z`} fill="url(#pgrd)"/>}
+                        {expensePath&&<path d={`${expensePath} L${xS(chartPoints.length-1)},${H-PAD.b} L${PAD.l},${H-PAD.b} Z`} fill="url(#egrd)"/>}
+                        {/* lines */}
+                        {expensePath&&<path d={expensePath} fill="none" stroke="#f87171" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>}
+                        {payoutPath&&<path d={payoutPath} fill="none" stroke="#4ade80" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>}
+                        {netPath&&<path d={netPath} fill="none" stroke={net>=0?"#e2e8f0":"#fbbf24"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="5 3"/>}
+                        {/* endpoint dots */}
+                        {chartPoints.length>0&&[
+                          [chartPoints[chartPoints.length-1].payout,"#4ade80"],
+                          [chartPoints[chartPoints.length-1].expense,"#f87171"],
+                          [chartPoints[chartPoints.length-1].net,net>=0?"#e2e8f0":"#fbbf24"],
+                        ].map(([v,c],i)=>(
+                          <circle key={i} cx={xS(chartPoints.length-1)} cy={yS(v)} r="3" fill={c} stroke="rgba(10,16,24,0.8)" strokeWidth="1.5"/>
+                        ))}
+                        {/* x-axis date labels — show first and last */}
+                        {chartPoints.length>0&&[
+                          [0,chartPoints[0].date],
+                          [chartPoints.length-1,chartPoints[chartPoints.length-1].date]
+                        ].map(([idx,date])=>(
+                          <text key={idx} x={xS(idx)} y={H-4} textAnchor={idx===0?"start":"end"} fontSize="9" fill="#334155" fontFamily="DM Mono,monospace">{date}</text>
+                        ))}
+                      </svg>
+                      {/* final values row */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:12,paddingTop:12,borderTop:"1px solid rgba(148,163,184,0.06)"}}>
+                        {[["Total Payouts",fmt$(totalOut),"#4ade80"],["Total Expenses",fmt$(totalPaid),"#f87171"],["Net Position",fmt$(net),net>=0?"#4ade80":"#f87171"]].map(([l,v,c])=>(
+                          <div key={l} style={{textAlign:"center"}}>
+                            <div style={{fontSize:10,color:"#4a5568",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600}}>{l}</div>
+                            <div className="mono" style={{fontSize:16,fontWeight:600,color:c}}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Monthly bar chart */}
                   {monthList.length>0&&(
                     <div className="card" style={{marginBottom:16}}>
@@ -2073,86 +2197,61 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
                     </div>
                   )}
 
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
-                    {/* By firm */}
-                    {firmList.length>0&&(
-                      <div className="card">
-                        <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>By Prop Firm</div>
-                        <div style={{fontSize:12,color:"#4a5568",marginBottom:16}}>Lifetime payouts per firm</div>
-                        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                          {firmList.map(f=>(
-                            <div key={f.firm}>
-                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                                <div style={{fontSize:13,color:"#e2e8f0",fontWeight:500}}>{f.firm}</div>
-                                <div style={{display:"flex",gap:12,alignItems:"center"}}>
-                                  <span style={{fontSize:11,color:"#4a5568"}}>{f.count} payout{f.count!==1?"s":""}</span>
-                                  <span className="mono" style={{fontSize:14,fontWeight:600,color:"#4ade80"}}>{fmt$(f.total)}</span>
-                                </div>
+                  {/* By firm */}
+                  {firmList.length>0&&(
+                    <div className="card" style={{marginBottom:16}}>
+                      <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>By Prop Firm</div>
+                      <div style={{fontSize:12,color:"#4a5568",marginBottom:16}}>Lifetime payouts per firm</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {firmList.map(f=>(
+                          <div key={f.firm}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                              <div style={{fontSize:13,color:"#e2e8f0",fontWeight:500}}>{f.firm}</div>
+                              <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                                <span style={{fontSize:11,color:"#4a5568"}}>{f.count} payout{f.count!==1?"s":""}</span>
+                                <span className="mono" style={{fontSize:14,fontWeight:600,color:"#4ade80"}}>{fmt$(f.total)}</span>
                               </div>
-                              <div className="bar-bg" style={{height:4}}><div style={{width:`${(f.total/totalOut)*100}%`,height:"100%",background:"linear-gradient(90deg,#4ade80,#06b6d4)",borderRadius:4}}/></div>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Payout milestones */}
-                    <div className="card">
-                      <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Milestones</div>
-                      <div style={{fontSize:12,color:"#4a5568",marginBottom:16}}>Payout achievements</div>
-                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {[
-                          {label:"First Payout",icon:"🥇",achieved:payoutTxs.length>=1,detail:payoutTxs.length>=1?`${payoutTxs[payoutTxs.length-1]?.date} · ${fmt$(parseFloat(payoutTxs[payoutTxs.length-1]?.amount)||0)}`:"log your first withdrawal"},
-                          {label:"3 Payouts",icon:"🔥",achieved:payoutTxs.length>=3,detail:payoutTxs.length>=3?`${payoutTxs.length} total so far`:`${payoutTxs.length}/3 — keep going`},
-                          {label:"$1,000 Withdrawn",icon:"💎",achieved:totalOut>=1000,detail:totalOut>=1000?`${fmt$(totalOut)} total`:`${fmt$(totalOut)} / $1,000`},
-                          {label:"$5,000 Withdrawn",icon:"🏆",achieved:totalOut>=5000,detail:totalOut>=5000?`${fmt$(totalOut)} total`:`${fmt$(totalOut)} / $5,000`},
-                          {label:"$10,000 Withdrawn",icon:"🌟",achieved:totalOut>=10000,detail:totalOut>=10000?`${fmt$(totalOut)} total`:`${fmt$(totalOut)} / $10,000`},
-                          {label:"Net Positive",icon:"🚀",achieved:net>0,detail:net>0?`+${fmt$(net)} ahead of fees`:`${fmt$(Math.abs(net))} more to break even`},
-                        ].map(m=>(
-                          <div key={m.label} style={{display:"flex",gap:12,alignItems:"center",padding:"10px 14px",background:m.achieved?"rgba(74,222,128,0.05)":"rgba(10,16,24,0.5)",border:`1px solid ${m.achieved?"rgba(74,222,128,0.15)":"rgba(148,163,184,0.06)"}`,borderRadius:8,opacity:m.achieved?1:0.6}}>
-                            <div style={{fontSize:20,minWidth:28,textAlign:"center"}}>{m.icon}</div>
-                            <div style={{flex:1}}>
-                              <div style={{fontSize:13,fontWeight:600,color:m.achieved?"#e2e8f0":"#4a5568",marginBottom:2}}>{m.label}</div>
-                              <div style={{fontSize:11,color:m.achieved?"#4a5568":"#334155"}}>{m.detail}</div>
-                            </div>
-                            {m.achieved&&<div style={{fontSize:12,color:"#4ade80",fontWeight:600}}>✓</div>}
+                            <div className="bar-bg" style={{height:4}}><div style={{width:`${(f.total/totalOut)*100}%`,height:"100%",background:"linear-gradient(90deg,#4ade80,#06b6d4)",borderRadius:4}}/></div>
                           </div>
                         ))}
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Payout history timeline */}
-                  <div className="card">
-                    <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Payout History</div>
-                    <div style={{fontSize:12,color:"#4a5568",marginBottom:16}}>Every withdrawal, newest first</div>
-                    <div style={{display:"flex",flexDirection:"column",gap:0}}>
-                      {payoutTxs.map((tx,i)=>{
-                        const amt=parseFloat(tx.amount)||0;
-                        const isLatest=i===0;
-                        const runningTotal=payoutTxs.slice(i).reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
-                        return(
-                          <div key={tx.id} style={{display:"flex",gap:16,padding:"14px 0",borderBottom:i<payoutTxs.length-1?"1px solid rgba(148,163,184,0.06)":"none"}}>
-                            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:0,minWidth:20}}>
-                              <div style={{width:10,height:10,borderRadius:"50%",background:isLatest?"#4ade80":"#16a34a",border:`2px solid ${isLatest?"rgba(74,222,128,0.4)":"rgba(22,163,74,0.3)"}`,marginTop:4,flexShrink:0}}/>
-                              {i<payoutTxs.length-1&&<div style={{width:1,flex:1,background:"rgba(148,163,184,0.06)",marginTop:4}}/>}
-                            </div>
-                            <div style={{flex:1,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                              <div>
-                                <div style={{fontSize:13,fontWeight:500,color:"#e2e8f0",marginBottom:2}}>{tx.firm||"Prop Firm"}</div>
-                                <div style={{fontSize:11,color:"#4a5568"}}>{tx.date}{tx.notes&&` · ${tx.notes}`}</div>
-                                {tx.accountId&&<div style={{fontSize:10,color:"#334155",marginTop:2}}>{accounts.find(a=>a.id===tx.accountId)?.name||""}</div>}
+                  {payoutTxs.length>0&&(
+                    <div className="card">
+                      <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Payout History</div>
+                      <div style={{fontSize:12,color:"#4a5568",marginBottom:16}}>Every withdrawal, newest first</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                        {payoutTxs.map((tx,i)=>{
+                          const amt=parseFloat(tx.amount)||0;
+                          const isLatest=i===0;
+                          const runningTotal=payoutTxs.slice(i).reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+                          return(
+                            <div key={tx.id} style={{display:"flex",gap:16,padding:"14px 0",borderBottom:i<payoutTxs.length-1?"1px solid rgba(148,163,184,0.06)":"none"}}>
+                              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:0,minWidth:20}}>
+                                <div style={{width:10,height:10,borderRadius:"50%",background:isLatest?"#4ade80":"#16a34a",border:`2px solid ${isLatest?"rgba(74,222,128,0.4)":"rgba(22,163,74,0.3)"}`,marginTop:4,flexShrink:0}}/>
+                                {i<payoutTxs.length-1&&<div style={{width:1,flex:1,background:"rgba(148,163,184,0.06)",marginTop:4}}/>}
                               </div>
-                              <div style={{textAlign:"right"}}>
-                                <div className="mono" style={{fontSize:17,fontWeight:600,color:"#4ade80"}}>{fmt$(amt)}</div>
-                                <div style={{fontSize:10,color:"#334155",marginTop:2}}>cumulative: {fmt$(runningTotal)}</div>
+                              <div style={{flex:1,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                                <div>
+                                  <div style={{fontSize:13,fontWeight:500,color:"#e2e8f0",marginBottom:2}}>{tx.firm||"Prop Firm"}</div>
+                                  <div style={{fontSize:11,color:"#4a5568"}}>{tx.date}{tx.notes&&` · ${tx.notes}`}</div>
+                                  {tx.accountId&&<div style={{fontSize:10,color:"#334155",marginTop:2}}>{accounts.find(a=>a.id===tx.accountId)?.name||""}</div>}
+                                </div>
+                                <div style={{textAlign:"right"}}>
+                                  <div className="mono" style={{fontSize:17,fontWeight:600,color:"#4ade80"}}>{fmt$(amt)}</div>
+                                  <div style={{fontSize:10,color:"#334155",marginTop:2}}>cumulative: {fmt$(runningTotal)}</div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </>
               )}
             </div>
