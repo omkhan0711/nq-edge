@@ -865,7 +865,7 @@ export default function App() {
                   ))}
                 </div>
 
-                {/* ── NQ EDGE SCORE ── */}
+                {/* ── TRADING SCORE ── */}
                 {activeStats&&activeStats.total>=5&&(()=>{
                   const s=activeStats;
                   // 1. Win/Loss Ratio (20%)
@@ -935,7 +935,7 @@ export default function App() {
                             <rect x={CX-13} y={CY+22} width={26} height={20} rx="5" fill={`${gradeColor}22`} stroke={`${gradeColor}44`} strokeWidth="1"/>
                             <text x={CX} y={CY+36} textAnchor="middle" fontSize="12" fontWeight="700" fill={gradeColor} fontFamily="DM Mono,monospace">{grade}</text>
                           </svg>
-                          <div style={{fontSize:11,fontWeight:700,color:"#475569",letterSpacing:"0.1em",textTransform:"uppercase"}}>NQ Edge Score</div>
+                          <div style={{fontSize:11,fontWeight:700,color:"#475569",letterSpacing:"0.1em",textTransform:"uppercase"}}>Trading Score</div>
                           <div style={{fontSize:10,color:"#334155",textAlign:"center",lineHeight:1.5,maxWidth:130}}>
                             {edgeScore>=80?"Elite performance":edgeScore>=65?"Strong edge":edgeScore>=50?"Developing edge":edgeScore>=35?"Needs work":"Focus on risk mgmt"}
                           </div>
