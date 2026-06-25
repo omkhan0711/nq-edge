@@ -1315,6 +1315,7 @@ export default function App() {
                   </table>
                 </div>
               ):(
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
                 {accountStats.filter(a=>showDormant||!a.dormant).sort((a,b)=>a.name.localeCompare(b.name)).map((a)=>{
                   const realIdx=accounts.findIndex(ac=>ac.id===a.id);
                   return(
@@ -1367,7 +1368,7 @@ export default function App() {
                     </div>
                   );
                 })}
-              </div>
+                </div>
               )
             )}
           </div>
