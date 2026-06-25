@@ -1,4 +1,10 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// ── Supabase client ──
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 const fmt$ = v => { const a = Math.abs(v); return (v < 0 ? "-$" : "$") + a.toFixed(2); };
 const OUTCOMES = ["Win","Loss","Breakeven"];
@@ -37,15 +43,57 @@ async function idbGetAll(){try{const db=await openDB();return new Promise((res,r
 function stripBlobs(trades){return trades.map(t=>{const{screenshot,aiReview,...rest}=t;return rest;});}
 async function rehydrateScreenshots(trades,setTrades){const blobs=await idbGetAll();if(!Object.keys(blobs).length)return;setTrades(prev=>prev.map(t=>({...t,screenshot:blobs[`${t.id}_screenshot`]??t.screenshot??"",aiReview:blobs[`${t.id}_aiReview`]??t.aiReview??""  })));}
 
+// ── Supabase sync helpers ──
+const sbDebounceTimers = {};
+async function sbSet(userId, key, value) {
+  if (!supabase || !userId) return;
+  clearTimeout(sbDebounceTimers[key]);
+  sbDebounceTimers[key] = setTimeout(async () => {
+    try {
+      await supabase.from("user_data").upsert({ user_id: userId, key, value: JSON.stringify(value) }, { onConflict: "user_id,key" });
+    } catch(e) { console.warn("Supabase sync failed:", e); }
+  }, 800);
+}
+async function sbGetAll(userId) {
+  if (!supabase || !userId) return {};
+  try {
+    const { data, error } = await supabase.from("user_data").select("key,value").eq("user_id", userId);
+    if (error || !data) return {};
+    const result = {};
+    data.forEach(row => { try { result[row.key] = JSON.parse(row.value); } catch {} });
+    return result;
+  } catch { return {}; }
+}
+
+// Global user id reference for useStorage to sync to Supabase
+let _sbUserId = null;
+function setSbUserId(id) { _sbUserId = id; }
+
 function useStorage(key, fallback) {
   const [val, setVal] = useState(() => { try { const s=localStorage.getItem(key); return s?JSON.parse(s):fallback; } catch { return fallback; } });
+  const initialized = useRef(false);
+
+  // When Supabase data loads (via event), update state
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.key === key) {
+        setVal(e.detail.value);
+        initialized.current = true;
+      }
+    };
+    window.addEventListener("sb_data_loaded", handler);
+    return () => window.removeEventListener("sb_data_loaded", handler);
+  }, [key]);
+
   useEffect(() => {
     try {
       if(key==="nq_trades_v8"){
         localStorage.setItem(key,JSON.stringify(stripBlobs(val)));
         val.forEach(t=>{if(t.id&&(t.screenshot||t.aiReview)){idbSet(`${t.id}_screenshot`,t.screenshot||"");idbSet(`${t.id}_aiReview`,t.aiReview||"");}});
+        if(_sbUserId && initialized.current) sbSet(_sbUserId, key, stripBlobs(val));
       } else {
         localStorage.setItem(key,JSON.stringify(val));
+        if(_sbUserId && initialized.current) sbSet(_sbUserId, key, val);
       }
     } catch(err){console.warn("Storage save failed:",err);}
   }, [key,val]);
@@ -272,12 +320,22 @@ function parseTradovateCSV(text) {
 }
 
 export default function App() {
+  // ── Auth state ──
+  const [authUser, setAuthUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(!!supabase);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authSent, setAuthSent] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  // ── All data state (must be before any return) ──
   const [trades, setTrades] = useStorage("nq_trades_v8",[]);
   const [accounts, setAccounts] = useStorage("nq_accounts_v6",[]);
   const [confluences, setConfluences] = useStorage("nq_confluences_v1",DEFAULT_CONFLUENCES);
   const [propFirms, setPropFirms] = useStorage("nq_firms_v1",DEFAULT_FIRMS);
   const [transactions, setTransactions] = useStorage("nq_transactions_v2",[]);
   const [showDormant, setShowDormant] = useStorage("nq_show_dormant",false);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [compactAccounts, setCompactAccounts] = useStorage("nq_compact_accounts", false);
   const [view, setView] = useState("dashboard");
   const [analyticsSection, setAnalyticsSection] = useState("rr");
   const [showForm, setShowForm] = useState(false);
@@ -298,11 +356,11 @@ export default function App() {
   const [calMonth, setCalMonth] = useState(()=>{ const d=new Date(); return{y:d.getFullYear(),m:d.getMonth()}; });
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReviewLoading, setAiReviewLoading] = useState(false);
-  const [coachMode, setCoachMode] = useState("performance"); // "performance" | "recap"
+  const [coachMode, setCoachMode] = useState("performance");
   const [coachReport, setCoachReport] = useState("");
   const [coachLoading, setCoachLoading] = useState(false);
   const [coachTradeIdx, setCoachTradeIdx] = useState(0);
-  const [coachDateRange, setCoachDateRange] = useState("all"); // "all"|"30d"|"7d"|"today"
+  const [coachDateRange, setCoachDateRange] = useState("all");
   const [screenshotPreview, setScreenshotPreview] = useState(null);
   const [toast, setToast] = useState(null);
   const [overviewSelectedAccounts, setOverviewSelectedAccounts] = useState([]);
@@ -310,16 +368,88 @@ export default function App() {
   const [importFileName, setImportFileName] = useState("");
   const [importAccountMults, setImportAccountMults] = useState({});
   const [galleryFilter, setGalleryFilter] = useState({ outcome:"All", confluence:"All" });
-  const [editingTransaction, setEditingTransaction] = useState(null); // holds tx being edited
+  const [editingTransaction, setEditingTransaction] = useState(null);
   const [expandedScreenshot, setExpandedScreenshot] = useState(null);
   const [hideValues, setHideValues] = useStorage("nq_hide_values",false);
   const [balanceAdjustments, setBalanceAdjustments] = useStorage("nq_balance_adjustments_v1",[]);
   const [adjustmentForm, setAdjustmentForm] = useState(EMPTY_ADJUSTMENT);
-  const [showAdjustmentForm, setShowAdjustmentForm] = useState(null); // accountId or null
-  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(null); // index or null
-  const [accountsCompact, setAccountsCompact] = useState(false);
+  const [showAdjustmentForm, setShowAdjustmentForm] = useState(null);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(null);
   const fileRef = useRef();
   const tvRef = useRef();
+
+  // ── Supabase auth listener + data load ──
+  useEffect(() => {
+    if (!supabase) { setAuthLoading(false); return; }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthUser(session?.user ?? null);
+      if (session?.user) loadFromSupabase(session.user.id);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ?? null);
+      if (session?.user) { setSbUserId(session.user.id); loadFromSupabase(session.user.id); }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function loadFromSupabase(userId) {
+    if (!userId) return;
+    setSbUserId(userId);
+    setDataLoading(true);
+    const remote = await sbGetAll(userId);
+    const KEYS = ["nq_trades_v8","nq_accounts_v6","nq_confluences_v1","nq_firms_v1","nq_transactions_v2","nq_show_dormant","nq_balance_adjustments_v1","nq_hide_values","nq_compact_accounts"];
+    KEYS.forEach(key => {
+      if (remote[key] !== undefined) {
+        localStorage.setItem(key, JSON.stringify(remote[key]));
+        window.dispatchEvent(new CustomEvent("sb_data_loaded", { detail: { key, value: remote[key] } }));
+      }
+    });
+    setDataLoading(false);
+  }
+
+  const handleSignIn = async () => {
+    if (!authEmail.trim()) { setAuthError("Enter your email address."); return; }
+    setAuthError("");
+    const { error } = await supabase.auth.signInWithOtp({ email: authEmail.trim(), options: { emailRedirectTo: window.location.origin } });
+    if (error) setAuthError(error.message);
+    else setAuthSent(true);
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setAuthUser(null);
+    setSbUserId(null);
+  };
+
+  // ── Auth screen (rendered conditionally inside main return below) ──
+  const needsAuth = supabase && (authLoading || !authUser);
+  const authScreen = authLoading
+    ? <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#080e17",fontFamily:"'DM Sans',sans-serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:28,fontWeight:700,color:"#e2e8f0",marginBottom:8,letterSpacing:"-0.02em"}}>NQ Edge</div><div style={{fontSize:13,color:"#334155"}}>Loading…</div></div></div>
+    : <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#080e17",fontFamily:"'DM Sans',sans-serif",padding:"0 16px"}}>
+        <div style={{width:"100%",maxWidth:380,background:"rgba(15,23,35,0.8)",border:"1px solid rgba(148,163,184,0.1)",borderRadius:20,padding:"40px 36px",backdropFilter:"blur(16px)",boxShadow:"0 24px 80px rgba(0,0,0,0.6)"}}>
+          <div style={{textAlign:"center",marginBottom:32}}>
+            <div style={{fontSize:32,fontWeight:700,color:"#e2e8f0",letterSpacing:"-0.03em",marginBottom:6}}>NQ Edge</div>
+            <div style={{fontSize:13,color:"#4a5568"}}>Your trading journal, backed up to the cloud.</div>
+          </div>
+          {!authSent ? (
+            <>
+              <div style={{fontSize:11,color:"#4a5568",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8,fontWeight:600}}>Email</div>
+              <input type="email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSignIn()} placeholder="you@example.com" style={{width:"100%",background:"rgba(15,23,35,0.6)",border:"1px solid rgba(148,163,184,0.1)",borderRadius:10,padding:"12px 14px",color:"#e2e8f0",fontSize:14,fontFamily:"'DM Sans',sans-serif",outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+              {authError && <div style={{fontSize:12,color:"#f87171",marginBottom:10}}>{authError}</div>}
+              <button onClick={handleSignIn} style={{width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"linear-gradient(135deg,rgba(14,165,233,0.9),rgba(6,182,212,0.9))",color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",letterSpacing:"0.01em"}}>Send Magic Link</button>
+              <div style={{fontSize:12,color:"#334155",textAlign:"center",marginTop:16,lineHeight:1.6}}>No password needed. We'll email you a sign-in link.<br/>Your data is synced across all your devices.</div>
+            </>
+          ) : (
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:36,marginBottom:16}}>📬</div>
+              <div style={{fontSize:16,fontWeight:600,color:"#e2e8f0",marginBottom:8}}>Check your email</div>
+              <div style={{fontSize:13,color:"#4a5568",lineHeight:1.7}}>We sent a magic link to <span style={{color:"#7dd3fc"}}>{authEmail}</span>.<br/>Click it to sign in — no password needed.</div>
+              <button onClick={()=>{setAuthSent(false);setAuthEmail("");}} style={{marginTop:24,fontSize:12,color:"#4a5568",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Use a different email</button>
+            </div>
+          )}
+        </div>
+      </div>;
 
   const showToast = (msg,type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -365,7 +495,7 @@ export default function App() {
     const winStreak=streak>0?streak:0;
     const sortedDays=Object.entries(dayMap).sort((a,b)=>b[0].localeCompare(a[0]));
     let greenDayStreak=0;
-    for(const [,d] of sortedDays){if(d.pnl>0)greenDayStreak++;else break;}
+    for(const [,d] of sortedDays){const beThresh=(d.maxAccounts||1)*50;if(d.pnl>0||Math.abs(d.pnl)<=beThresh)greenDayStreak++;else break;}
     const rrDist={};
     RR_BUCKETS.forEach(b=>rrDist[b]={count:0,wins:0,losses:0});
     tradeList.filter(t=>t.rr).forEach(t=>{
@@ -705,6 +835,8 @@ export default function App() {
   const inp={width:"100%",background:"rgba(15,23,35,0.5)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:10,padding:"10px 14px",color:"#e2e8f0",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",boxSizing:"border-box",transition:"all 0.2s ease"};
   const lbl={display:"block",color:"#64748b",fontSize:11,marginBottom:7,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",fontWeight:600};
 
+  if (needsAuth) return authScreen;
+
   return (
     <div className={hideValues?"hide-values":""} style={{fontFamily:"'DM Sans','Inter',sans-serif",background:"transparent",minHeight:"100vh",color:"#e2e8f0",width:"100%"}}>
       <style>{`
@@ -786,8 +918,8 @@ export default function App() {
             <div style={{fontSize:11,color:"#334155",marginLeft:4,paddingLeft:12,borderLeft:"1px solid rgba(148,163,184,0.08)"}}>NQ · ICT · IFVG</div>
           </div>
           <div style={{display:"flex",gap:2,background:"rgba(15,23,35,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:12,padding:4,backdropFilter:"blur(8px)"}}>
-            {["dashboard","accounts","journal","analytics","screenshots","financials","payouts"].map(v=>(
-              <button key={v} className={`nav-tab ${view===v?"nav-active":"nav-inactive"}`} onClick={()=>setView(v)} style={{textTransform:"capitalize"}}>{v==="payouts"?"💰 Payouts":v}</button>
+            {["dashboard","accounts","journal","analytics","screenshots","financials"].map(v=>(
+              <button key={v} className={`nav-tab ${view===v?"nav-active":"nav-inactive"}`} onClick={()=>setView(v)} style={{textTransform:"capitalize"}}>{v}</button>
             ))}
           </div>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -812,6 +944,13 @@ export default function App() {
             <button className="btn btn-primary btn-sm" onClick={()=>{setEditIdx(null);setForm(EMPTY);setScreenshotPreview(null);setShowForm(true);}}>
               + Log Trade
             </button>
+            {supabase && authUser && (
+              <button className="btn btn-ghost btn-sm" onClick={handleSignOut} title={`Signed in as ${authUser.email}`} style={{color:"#64748b",fontSize:11}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Sign Out
+              </button>
+            )}
+            {dataLoading && <div style={{fontSize:11,color:"#4a5568",padding:"0 8px"}}>Syncing…</div>}
           </div>
         </div>
       </div>
@@ -856,7 +995,7 @@ export default function App() {
                     {l:"Trades",v:activeStats?.total||0,c:"#e2e8f0"},
                     {l:"Plan %",v:`${(activeStats?.followedPlanRate||0).toFixed(0)}%`,c:(activeStats?.followedPlanRate||0)>=70?"#4ade80":"#fbbf24"},
                     {l:"Win Streak",v:(activeStats?.winStreak||0)>0?`${activeStats.winStreak}W`:"—",c:(activeStats?.winStreak||0)>0?"#4ade80":"#4a5568"},
-                    {l:"Green Streak",v:(activeStats?.greenDayStreak||0)>0?`${activeStats.greenDayStreak}D`:"—",c:(activeStats?.greenDayStreak||0)>0?"#4ade80":"#4a5568"}
+                    {l:"Green Days",v:(activeStats?.greenDayStreak||0)>0?`${activeStats.greenDayStreak}D`:"—",c:(activeStats?.greenDayStreak||0)>0?"#4ade80":"#4a5568"}
                   ].map(s=>(
                     <div key={s.l} className="stat-card">
                       <div style={{fontSize:10,color:"#475569",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600,marginBottom:10}}>{s.l}</div>
@@ -864,112 +1003,6 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-
-                {/* ── TRADING SCORE ── */}
-                {activeStats&&activeStats.total>=5&&(()=>{
-                  const s=activeStats;
-                  // 1. Win/Loss Ratio (20%)
-                  const wlRatio=s.avgLoss?Math.abs(s.avgWin/s.avgLoss):s.avgWin?3:0;
-                  const wlScore=wlRatio>=2.6?100:wlRatio>=2.4?90:wlRatio>=2.2?80:wlRatio>=2.0?70:wlRatio>=1.9?60:wlRatio>=1.8?50:20;
-                  // 2. Win Rate (15%) — capped at 60%
-                  const wrScore=Math.min(100,(s.winRate/60)*100);
-                  // 3. Max Drawdown (20%) — lower is better
-                  const ddPct=s.totalPnl>0?Math.min(100,(s.maxDD/Math.max(s.totalPnl,1))*100):s.maxDD>0?100:0;
-                  const ddScore=Math.max(0,100-ddPct);
-                  // 4. Profit Factor (25%)
-                  const pf=s.profitFactor===999?3:s.profitFactor;
-                  const pfScore=pf>=2.6?100:pf>=2.4?90:pf>=2.2?80:pf>=2.0?70:pf>=1.9?60:pf>=1.8?50:20;
-                  // 5. Recovery Factor (10%) — net profit / maxDD
-                  const rf=s.maxDD>0?(s.totalPnl/s.maxDD):s.totalPnl>0?4:0;
-                  const rfScore=rf>=3.5?100:rf>=3.0?80:rf>=2.5?65:rf>=2.0?55:rf>=1.5?40:rf>=1.0?15:0;
-                  // 6. Consistency (10%) — stddev of day P&Ls / total profit
-                  const dayPnls=Object.values(s.dayMap).map(d=>d.pnl);
-                  const dayAvg=dayPnls.length?dayPnls.reduce((a,b)=>a+b,0)/dayPnls.length:0;
-                  const dayStdDev=dayPnls.length>1?Math.sqrt(dayPnls.reduce((a,b)=>a+(b-dayAvg)**2,0)/dayPnls.length):0;
-                  const consistencyRaw=s.totalPnl>0&&dayAvg>0?(dayStdDev/s.totalPnl)*100:s.totalPnl<=0?100:0;
-                  const consistencyScore=Math.max(0,100-consistencyRaw);
-                  // 7. Plan Adherence bonus (replaces nothing — we blend it in)
-                  const planScore=Math.min(100,(s.followedPlanRate/70)*100);
-                  // Weighted total (weights sum to 100)
-                  const edgeScore=Math.round(
-                    wlScore*0.20+
-                    wrScore*0.15+
-                    ddScore*0.18+
-                    pfScore*0.22+
-                    rfScore*0.10+
-                    consistencyScore*0.08+
-                    planScore*0.07
-                  );
-                  const grade=edgeScore>=90?"S":edgeScore>=80?"A":edgeScore>=70?"B":edgeScore>=55?"C":edgeScore>=40?"D":"F";
-                  const gradeColor=edgeScore>=80?"#4ade80":edgeScore>=60?"#a3e635":edgeScore>=45?"#fbbf24":edgeScore>=30?"#fb923c":"#f87171";
-                  // SVG arc gauge
-                  const R=54,CX=70,CY=70,strokeW=8;
-                  const arcLen=Math.PI*R; // half circle
-                  const filled=(edgeScore/100)*arcLen;
-                  const pillars=[
-                    {label:"Profit Factor",score:pfScore,weight:"22%",color:"#a78bfa"},
-                    {label:"Win/Loss Ratio",score:wlScore,weight:"20%",color:"#38bdf8"},
-                    {label:"Max Drawdown",score:ddScore,weight:"18%",color:"#fb923c"},
-                    {label:"Win Rate",score:wrScore,weight:"15%",color:"#4ade80"},
-                    {label:"Recovery",score:rfScore,weight:"10%",color:"#f472b6"},
-                    {label:"Consistency",score:consistencyScore,weight:"8%",color:"#fbbf24"},
-                    {label:"Plan Adherence",score:planScore,weight:"7%",color:"#34d399"},
-                  ];
-                  return(
-                    <div className="card" style={{marginBottom:20,padding:"24px 28px",background:"rgba(10,16,24,0.7)",border:`1px solid ${gradeColor}22`,position:"relative",overflow:"hidden"}}>
-                      {/* subtle glow behind score */}
-                      <div style={{position:"absolute",top:-40,left:40,width:160,height:160,borderRadius:"50%",background:`radial-gradient(circle,${gradeColor}18 0%,transparent 70%)`,pointerEvents:"none"}}/>
-                      <div style={{display:"grid",gridTemplateColumns:"160px 1fr",gap:32,alignItems:"center"}}>
-                        {/* Gauge */}
-                        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-                          <svg width="140" height="85" viewBox="0 0 140 85">
-                            {/* track */}
-                            <path d={`M ${CX-R} ${CY} A ${R} ${R} 0 0 1 ${CX+R} ${CY}`} fill="none" stroke="rgba(148,163,184,0.08)" strokeWidth={strokeW} strokeLinecap="round"/>
-                            {/* filled arc */}
-                            <path d={`M ${CX-R} ${CY} A ${R} ${R} 0 0 1 ${CX+R} ${CY}`} fill="none" stroke={gradeColor} strokeWidth={strokeW} strokeLinecap="round"
-                              strokeDasharray={`${filled} ${arcLen}`} style={{filter:`drop-shadow(0 0 6px ${gradeColor}88)`,transition:"stroke-dasharray 0.6s ease"}}/>
-                            {/* score text */}
-                            <text x={CX} y={CY-4} textAnchor="middle" fontSize="28" fontWeight="700" fill={gradeColor} fontFamily="DM Mono,monospace">{edgeScore}</text>
-                            <text x={CX} y={CY+14} textAnchor="middle" fontSize="11" fill="#4a5568" fontFamily="DM Sans,sans-serif">/ 100</text>
-                            {/* grade badge */}
-                            <rect x={CX-13} y={CY+22} width={26} height={20} rx="5" fill={`${gradeColor}22`} stroke={`${gradeColor}44`} strokeWidth="1"/>
-                            <text x={CX} y={CY+36} textAnchor="middle" fontSize="12" fontWeight="700" fill={gradeColor} fontFamily="DM Mono,monospace">{grade}</text>
-                          </svg>
-                          <div style={{fontSize:11,fontWeight:700,color:"#475569",letterSpacing:"0.1em",textTransform:"uppercase"}}>Trading Score</div>
-                          <div style={{fontSize:10,color:"#334155",textAlign:"center",lineHeight:1.5,maxWidth:130}}>
-                            {edgeScore>=80?"Elite performance":edgeScore>=65?"Strong edge":edgeScore>=50?"Developing edge":edgeScore>=35?"Needs work":"Focus on risk mgmt"}
-                          </div>
-                        </div>
-                        {/* Pillar bars */}
-                        <div>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 24px"}}>
-                            {pillars.map(p=>(
-                              <div key={p.label}>
-                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                                  <span style={{fontSize:11,color:"#4a5568",fontWeight:500}}>{p.label}</span>
-                                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                                    <span style={{fontSize:9,color:"#334155"}}>{p.weight}</span>
-                                    <span className="mono" style={{fontSize:12,fontWeight:600,color:p.score>=70?p.color:p.score>=40?"#fbbf24":"#f87171",minWidth:28,textAlign:"right"}}>{Math.round(p.score)}</span>
-                                  </div>
-                                </div>
-                                <div style={{height:4,background:"rgba(148,163,184,0.06)",borderRadius:2,overflow:"hidden"}}>
-                                  <div style={{width:`${p.score}%`,height:"100%",background:p.score>=70?p.color:p.score>=40?"#fbbf24":"#f87171",borderRadius:2,transition:"width 0.5s ease"}}/>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid rgba(148,163,184,0.06)",fontSize:10,color:"#334155",lineHeight:1.6}}>
-                            {edgeScore<50&&ddScore<50&&"⚠ Drawdown is your biggest drag — tighten stops. "}
-                            {edgeScore<50&&wrScore<50&&"📉 Win rate below 50% — be more selective with entries. "}
-                            {edgeScore>=70&&pfScore>=70&&"✅ Solid profit factor — your edge is real. "}
-                            {planScore<60&&"📋 Following your plan more consistently would boost your score. "}
-                            {edgeScore>=80&&"🔥 You're in the top tier. Keep compounding the process."}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
 
                 {/* Portfolio Summary */}
                 {(()=>{
@@ -1066,19 +1099,9 @@ export default function App() {
                     const mWins=mt.reduce((s,[,d])=>s+d.wins,0);
                     const mLosses=mt.reduce((s,[,d])=>s+d.losses,0);
                     const mWR=mWins+mLosses>0?(mWins/(mWins+mLosses))*100:0;
-                    // % gain: use total capital of active (non-dormant) accounts
-                    const activeAccs=accountStats.filter(a=>!a.dormant);
-                    const totalCapital=activeAccs.reduce((s,a)=>s+a.startBal,0);
-                    const mPct=totalCapital?(mPnl/totalCapital)*100:null;
                     return(
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:20}}>
-                        {[
-                          ["Month P&L",fmt$(mPnl),mPnl>=0?"#4ade80":"#f87171"],
-                          ["% Gain",mPct!=null?`${mPct>=0?"+":""}${mPct.toFixed(2)}%`:"—",mPct==null?"#4a5568":mPct>=0?"#4ade80":"#f87171"],
-                          ["Trades",mTrades,"#e2e8f0"],
-                          ["Win Rate",`${mWR.toFixed(0)}%`,mWR>=50?"#4ade80":"#f87171"],
-                          ["Trading Days",mt.length,"#93c5fd"]
-                        ].map(([l,v,c])=>(
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:20}}>
+                        {[["Month P&L",fmt$(mPnl),mPnl>=0?"#4ade80":"#f87171"],["Trades",mTrades,"#e2e8f0"],["Win Rate",`${mWR.toFixed(0)}%`,mWR>=50?"#4ade80":"#f87171"],["Trading Days",mt.length,"#93c5fd"]].map(([l,v,c])=>(
                           <div key={l} style={{background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8,padding:"14px 16px"}}>
                             <div className="section-title" style={{marginBottom:8}}>{l}</div>
                             <div className="mono" style={{fontSize:20,fontWeight:500,color:c}}>{v}</div>
@@ -1123,58 +1146,6 @@ export default function App() {
                       );
                     })}
                   </div>
-
-                  {/* Weekly lump-sum summary */}
-                  {(()=>{
-                    const mt=Object.entries(calDayMap).filter(([date])=>{ const [y,m]=date.split("-").map(Number); return y===calMonth.y&&m-1===calMonth.m; });
-                    if(!mt.length) return null;
-                    // Group days into calendar weeks (Sun-Sat rows)
-                    const firstDow=new Date(calMonth.y,calMonth.m,1).getDay();
-                    const totalDays=new Date(calMonth.y,calMonth.m+1,0).getDate();
-                    const weeks=[];
-                    let weekStart=1-firstDow; // may be negative (days from prev month)
-                    while(weekStart<=totalDays){
-                      const weekDays=[];
-                      for(let d=weekStart;d<weekStart+7;d++){
-                        if(d>=1&&d<=totalDays)weekDays.push(d);
-                      }
-                      if(weekDays.length>0)weeks.push(weekDays);
-                      weekStart+=7;
-                    }
-                    const weekData=weeks.map((days,wi)=>{
-                      let pnl=0,trades=0,wins=0,losses=0;
-                      days.forEach(day=>{
-                        const ds=`${calMonth.y}-${String(calMonth.m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-                        const d=calDayMap[ds];
-                        if(d){pnl+=d.pnl;trades+=d.count;wins+=d.wins;losses+=d.losses;}
-                      });
-                      const dayRange=days.length>1?`${days[0]}–${days[days.length-1]}`:`${days[0]}`;
-                      return{week:wi+1,dayRange,pnl,trades,wins,losses,hasTrades:trades>0};
-                    }).filter(w=>w.hasTrades);
-                    if(!weekData.length)return null;
-                    return(
-                      <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid rgba(148,163,184,0.06)"}}>
-                        <div style={{fontSize:12,fontWeight:600,color:"#475569",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:12}}>Weekly Lump Sum</div>
-                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                          {weekData.map(w=>{
-                            const wr=w.wins+w.losses>0?(w.wins/(w.wins+w.losses)*100):0;
-                            const isPos=w.pnl>0;const isNeg=w.pnl<0;
-                            return(
-                              <div key={w.week} style={{display:"grid",gridTemplateColumns:"90px 1fr 100px 80px 70px",gap:12,alignItems:"center",padding:"12px 16px",background:isPos?"rgba(74,222,128,0.04)":isNeg?"rgba(248,113,113,0.04)":"rgba(251,191,36,0.04)",border:`1px solid ${isPos?"rgba(74,222,128,0.15)":isNeg?"rgba(248,113,113,0.15)":"rgba(251,191,36,0.15)"}`,borderRadius:8}}>
-                                <div style={{fontSize:11,color:"#4a5568"}}>Week {w.week} <span style={{color:"#334155"}}>({MONTHS[calMonth.m].slice(0,3)} {w.dayRange})</span></div>
-                                <div style={{position:"relative",height:5,background:"rgba(148,163,184,0.06)",borderRadius:3,overflow:"hidden"}}>
-                                  <div style={{width:`${Math.min(100,Math.abs(w.pnl)/50*100)}%`,maxWidth:"100%",height:"100%",background:isPos?"rgba(74,222,128,0.5)":isNeg?"rgba(248,113,113,0.5)":"rgba(251,191,36,0.5)",borderRadius:3}}/>
-                                </div>
-                                <div className="mono" style={{fontSize:15,fontWeight:600,color:isPos?"#4ade80":isNeg?"#f87171":"#fbbf24",textAlign:"right"}}>{fmt$(w.pnl)}</div>
-                                <div style={{fontSize:11,color:"#4a5568",textAlign:"right"}}>{w.trades}t · {wr.toFixed(0)}% WR</div>
-                                <div style={{fontSize:10,color:"#475569",textAlign:"right",letterSpacing:"0.05em",textTransform:"uppercase"}}>lump sum</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
               </>
             )}
@@ -1190,9 +1161,6 @@ export default function App() {
                 <div className="page-sub">{activeAccounts.length} active · {accounts.filter(a=>a.dormant).length} dormant</div>
               </div>
               <div style={{display:"flex",gap:8}}>
-                <button className={`btn btn-ghost btn-sm`} onClick={()=>setAccountsCompact(p=>!p)} style={{color:accountsCompact?"#7dd3fc":"#64748b",borderColor:accountsCompact?"rgba(14,165,233,0.3)":"undefined",background:accountsCompact?"rgba(14,165,233,0.06)":"undefined"}}>
-                  {accountsCompact?"⊞ Full View":"⊟ Compact"}
-                </button>
                 <button className={`btn btn-ghost btn-sm`} onClick={()=>setShowDormant(p=>!p)}>{showDormant?"Hide Dormant":"Show Dormant"}</button>
                 <button className="btn btn-primary btn-sm" onClick={()=>{setEditAccountIdx(null);setAccountForm(EMPTY_ACCOUNT);setShowAccountForm(true);}}>+ Add Account</button>
               </div>
@@ -1201,26 +1169,6 @@ export default function App() {
               <div style={{textAlign:"center",padding:"80px 0"}}>
                 <div style={{fontSize:14,color:"#4a5568",marginBottom:20}}>No accounts added yet</div>
                 <button className="btn btn-primary" onClick={()=>setShowAccountForm(true)} style={{padding:"10px 24px"}}>Add First Account</button>
-              </div>
-            ):accountsCompact?(
-              <div className="card" style={{padding:0,overflow:"hidden"}}>
-                {accountStats.filter(a=>showDormant||!a.dormant).sort((a,b)=>a.name.localeCompare(b.name)).map((a,i,arr)=>{
-                  return(
-                    <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderBottom:i<arr.length-1?"1px solid rgba(148,163,184,0.06)":"none",opacity:a.dormant?0.5:1}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10}}>
-                        <div style={{width:8,height:8,borderRadius:"50%",background:a.currentBalancePct>=0?"#4ade80":"#f87171",flexShrink:0}}/>
-                        <div>
-                          <div style={{fontSize:14,fontWeight:600,color:a.dormant?"#4a5568":"#e2e8f0"}}>{a.name}</div>
-                          <div style={{fontSize:11,color:"#4a5568"}}>{a.firm}{a.dormant?" · Dormant":""}</div>
-                        </div>
-                      </div>
-                      <div style={{textAlign:"right"}}>
-                        <div className="mono" style={{fontSize:18,fontWeight:600,color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
-                        <div style={{fontSize:11,color:a.currentBalancePct>=0?"#4ade80":"#f87171",marginTop:1}}>{a.currentBalancePct>=0?"+":""}{a.currentBalancePct.toFixed(2)}%</div>
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
             ):(
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
@@ -2127,242 +2075,6 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
             </div>
           </div>
         )}
-
-        {/* ─── PAYOUTS ─── */}
-        {view==="payouts"&&(()=>{
-          const payoutTxs=[...transactions].filter(t=>t.type==="payout").sort((a,b)=>new Date(b.date)-new Date(a.date));
-          const expenseTxs=[...transactions].filter(t=>isExpenseTx(t)).sort((a,b)=>new Date(a.date)-new Date(b.date));
-          const totalPaid=transactions.filter(t=>t.type==="challenge_fee"||t.type==="activation_fee").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
-          const totalOut=payoutTxs.reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
-          const net=totalOut-totalPaid;
-          const avgPayout=payoutTxs.length?totalOut/payoutTxs.length:0;
-          const biggestPayout=payoutTxs.length?Math.max(...payoutTxs.map(t=>parseFloat(t.amount)||0)):0;
-          // By firm
-          const byFirm={};
-          payoutTxs.forEach(t=>{const f=t.firm||"Unknown";if(!byFirm[f])byFirm[f]={firm:f,count:0,total:0,txs:[]};byFirm[f].total+=parseFloat(t.amount)||0;byFirm[f].count++;byFirm[f].txs.push(t);});
-          const firmList=Object.values(byFirm).sort((a,b)=>b.total-a.total);
-          // Monthly payout totals for sparkline-style bars
-          const byMonth={};
-          payoutTxs.forEach(t=>{const ym=t.date?.substring(0,7)||"";if(!byMonth[ym])byMonth[ym]=0;byMonth[ym]+=parseFloat(t.amount)||0;});
-          const monthList=Object.entries(byMonth).sort((a,b)=>a[0].localeCompare(b[0]));
-          const maxMonthPayout=monthList.length?Math.max(...monthList.map(([,v])=>v)):1;
-
-          // Build cumulative chart data — merge all txs sorted by date
-          const allTxsSorted=[...transactions].sort((a,b)=>new Date(a.date)-new Date(b.date)||a.id-b.id);
-          let cumPayout=0,cumExpense=0;
-          const chartPoints=[];
-          allTxsSorted.forEach(tx=>{
-            const amt=parseFloat(tx.amount)||0;
-            if(tx.type==="payout")cumPayout+=amt;
-            else if(isExpenseTx(tx))cumExpense+=amt;
-            chartPoints.push({date:tx.date,payout:cumPayout,expense:cumExpense,net:cumPayout-cumExpense,type:tx.type==="payout"?"payout":"expense"});
-          });
-          // SVG chart dimensions
-          const W=560,H=180,PAD={t:16,r:16,b:28,l:52};
-          const cW=W-PAD.l-PAD.r,cH=H-PAD.t-PAD.b;
-          const allVals=chartPoints.flatMap(p=>[p.payout,p.expense,p.net]);
-          const minV=Math.min(0,...allVals),maxV=Math.max(0,...allVals);
-          const range=maxV-minV||1;
-          const xS=i=>(i/(chartPoints.length-1||1))*cW+PAD.l;
-          const yS=v=>H-PAD.b-((v-minV)/range)*cH;
-          const toPath=getter=>chartPoints.map((p,i)=>`${i===0?"M":"L"}${xS(i).toFixed(1)},${yS(getter(p)).toFixed(1)}`).join(" ");
-          const payoutPath=chartPoints.length>1?toPath(p=>p.payout):"";
-          const expensePath=chartPoints.length>1?toPath(p=>p.expense):"";
-          const netPath=chartPoints.length>1?toPath(p=>p.net):"";
-          // Y axis ticks
-          const yTicks=4;
-          const tickVals=Array.from({length:yTicks+1},(_,i)=>minV+(range/yTicks)*i);
-
-          return(
-            <div>
-              <div style={{marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
-                <div>
-                  <div className="page-title">💰 Payout Tracker</div>
-                  <div className="page-sub">Real money extracted from prop firms</div>
-                </div>
-                <button className="btn btn-primary btn-sm" onClick={()=>setView("financials")}>+ Log Payout</button>
-              </div>
-
-              {/* Hero stats */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
-                {[
-                  {l:"Total Withdrawn",v:fmt$(totalOut),c:"#4ade80",sub:`${payoutTxs.length} payout${payoutTxs.length!==1?"s":""}`,icon:"💵"},
-                  {l:"Total Fees Paid",v:fmt$(totalPaid),c:"#f87171",sub:"challenges + activations",icon:"🏦"},
-                  {l:"Net Real Profit",v:fmt$(net),c:net>=0?"#4ade80":"#f87171",sub:net>=0?"you're up! 🎉":"keep grinding",icon:net>=0?"🚀":"⚡"},
-                  {l:"Avg Payout",v:payoutTxs.length?fmt$(avgPayout):"—",c:"#a78bfa",sub:payoutTxs.length?`biggest: ${fmt$(biggestPayout)}`:"no payouts yet",icon:"🎯"},
-                ].map(s=>(
-                  <div key={s.l} className="card" style={{padding:24,background:s.l==="Net Real Profit"?net>=0?"rgba(74,222,128,0.05)":"rgba(248,113,113,0.05)":undefined,border:s.l==="Net Real Profit"?`1px solid ${net>=0?"rgba(74,222,128,0.15)":"rgba(248,113,113,0.15)"}`:undefined}}>
-                    <div style={{fontSize:22,marginBottom:8}}>{s.icon}</div>
-                    <div style={{fontSize:10,color:"#475569",letterSpacing:"0.07em",textTransform:"uppercase",fontWeight:600,marginBottom:8}}>{s.l}</div>
-                    <div className="mono" style={{fontSize:28,fontWeight:600,color:s.c,marginBottom:4}}>{s.v}</div>
-                    <div style={{fontSize:11,color:"#334155"}}>{s.sub}</div>
-                  </div>
-                ))}
-              </div>
-
-              {!payoutTxs.length&&!expenseTxs.length?(
-                <div className="card" style={{textAlign:"center",padding:"60px 0"}}>
-                  <div style={{fontSize:40,marginBottom:16}}>🏦</div>
-                  <div style={{fontSize:16,fontWeight:600,color:"#e2e8f0",marginBottom:8}}>No transactions yet</div>
-                  <div style={{fontSize:13,color:"#4a5568",marginBottom:24}}>Log fees and payouts in the Financials tab to start tracking</div>
-                  <button className="btn btn-primary" onClick={()=>setView("financials")}>Go to Financials</button>
-                </div>
-              ):(
-                <>
-                  {/* Cumulative P&L Chart */}
-                  {chartPoints.length>1&&(
-                    <div className="card" style={{marginBottom:16}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
-                        <div>
-                          <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Cumulative P&L Track</div>
-                          <div style={{fontSize:12,color:"#4a5568"}}>How your payouts, expenses and net have grown over time</div>
-                        </div>
-                        <div style={{display:"flex",gap:16,alignItems:"center"}}>
-                          {[["#4ade80","Payouts"],["#f87171","Expenses"],[net>=0?"#e2e8f0":"#fbbf24","Net"]].map(([c,l])=>(
-                            <div key={l} style={{display:"flex",gap:5,alignItems:"center"}}>
-                              <div style={{width:20,height:2,background:c,borderRadius:2}}/>
-                              <span style={{fontSize:11,color:"#4a5568"}}>{l}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{display:"block",overflow:"visible"}}>
-                        <defs>
-                          <linearGradient id="pgrd" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#4ade80" stopOpacity="0.18"/>
-                            <stop offset="100%" stopColor="#4ade80" stopOpacity="0"/>
-                          </linearGradient>
-                          <linearGradient id="egrd" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#f87171" stopOpacity="0.14"/>
-                            <stop offset="100%" stopColor="#f87171" stopOpacity="0"/>
-                          </linearGradient>
-                        </defs>
-                        {/* grid lines */}
-                        {tickVals.map((v,i)=>(
-                          <g key={i}>
-                            <line x1={PAD.l} y1={yS(v)} x2={W-PAD.r} y2={yS(v)} stroke="rgba(148,163,184,0.06)" strokeWidth="1"/>
-                            <text x={PAD.l-6} y={yS(v)+4} textAnchor="end" fontSize="9" fill="#334155" fontFamily="DM Mono,monospace">{v>=0?`$${(v/1000).toFixed(0)}k`:`-$${(Math.abs(v)/1000).toFixed(0)}k`}</text>
-                          </g>
-                        ))}
-                        {/* zero line */}
-                        {minV<0&&<line x1={PAD.l} y1={yS(0)} x2={W-PAD.r} y2={yS(0)} stroke="rgba(148,163,184,0.15)" strokeWidth="1" strokeDasharray="4 3"/>}
-                        {/* filled areas */}
-                        {payoutPath&&<path d={`${payoutPath} L${xS(chartPoints.length-1)},${H-PAD.b} L${PAD.l},${H-PAD.b} Z`} fill="url(#pgrd)"/>}
-                        {expensePath&&<path d={`${expensePath} L${xS(chartPoints.length-1)},${H-PAD.b} L${PAD.l},${H-PAD.b} Z`} fill="url(#egrd)"/>}
-                        {/* lines */}
-                        {expensePath&&<path d={expensePath} fill="none" stroke="#f87171" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>}
-                        {payoutPath&&<path d={payoutPath} fill="none" stroke="#4ade80" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>}
-                        {netPath&&<path d={netPath} fill="none" stroke={net>=0?"#e2e8f0":"#fbbf24"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="5 3"/>}
-                        {/* endpoint dots */}
-                        {chartPoints.length>0&&[
-                          [chartPoints[chartPoints.length-1].payout,"#4ade80"],
-                          [chartPoints[chartPoints.length-1].expense,"#f87171"],
-                          [chartPoints[chartPoints.length-1].net,net>=0?"#e2e8f0":"#fbbf24"],
-                        ].map(([v,c],i)=>(
-                          <circle key={i} cx={xS(chartPoints.length-1)} cy={yS(v)} r="3" fill={c} stroke="rgba(10,16,24,0.8)" strokeWidth="1.5"/>
-                        ))}
-                        {/* x-axis date labels — show first and last */}
-                        {chartPoints.length>0&&[
-                          [0,chartPoints[0].date],
-                          [chartPoints.length-1,chartPoints[chartPoints.length-1].date]
-                        ].map(([idx,date])=>(
-                          <text key={idx} x={xS(idx)} y={H-4} textAnchor={idx===0?"start":"end"} fontSize="9" fill="#334155" fontFamily="DM Mono,monospace">{date}</text>
-                        ))}
-                      </svg>
-                      {/* final values row */}
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:12,paddingTop:12,borderTop:"1px solid rgba(148,163,184,0.06)"}}>
-                        {[["Total Payouts",fmt$(totalOut),"#4ade80"],["Total Expenses",fmt$(totalPaid),"#f87171"],["Net Position",fmt$(net),net>=0?"#4ade80":"#f87171"]].map(([l,v,c])=>(
-                          <div key={l} style={{textAlign:"center"}}>
-                            <div style={{fontSize:10,color:"#4a5568",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600}}>{l}</div>
-                            <div className="mono" style={{fontSize:16,fontWeight:600,color:c}}>{v}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Monthly bar chart */}
-                  {monthList.length>0&&(
-                    <div className="card" style={{marginBottom:16}}>
-                      <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Monthly Payouts</div>
-                      <div style={{fontSize:12,color:"#4a5568",marginBottom:20}}>How much you extracted each month</div>
-                      <div style={{display:"flex",gap:6,alignItems:"flex-end",height:100}}>
-                        {monthList.map(([ym,v])=>{
-                          const pct=(v/maxMonthPayout)*100;
-                          const [yr,mo]=ym.split("-");
-                          const label=`${MONTHS[parseInt(mo)-1].slice(0,3)} '${yr.slice(2)}`;
-                          return(
-                            <div key={ym} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-                              <div className="mono" style={{fontSize:10,color:"#4ade80",fontWeight:600,whiteSpace:"nowrap"}}>{fmt$(v)}</div>
-                              <div style={{width:"100%",height:`${pct}%`,minHeight:4,background:"linear-gradient(180deg,#4ade80,#16a34a)",borderRadius:"4px 4px 0 0",transition:"height 0.3s ease"}}/>
-                              <div style={{fontSize:10,color:"#4a5568",whiteSpace:"nowrap"}}>{label}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* By firm */}
-                  {firmList.length>0&&(
-                    <div className="card" style={{marginBottom:16}}>
-                      <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>By Prop Firm</div>
-                      <div style={{fontSize:12,color:"#4a5568",marginBottom:16}}>Lifetime payouts per firm</div>
-                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                        {firmList.map(f=>(
-                          <div key={f.firm}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                              <div style={{fontSize:13,color:"#e2e8f0",fontWeight:500}}>{f.firm}</div>
-                              <div style={{display:"flex",gap:12,alignItems:"center"}}>
-                                <span style={{fontSize:11,color:"#4a5568"}}>{f.count} payout{f.count!==1?"s":""}</span>
-                                <span className="mono" style={{fontSize:14,fontWeight:600,color:"#4ade80"}}>{fmt$(f.total)}</span>
-                              </div>
-                            </div>
-                            <div className="bar-bg" style={{height:4}}><div style={{width:`${(f.total/totalOut)*100}%`,height:"100%",background:"linear-gradient(90deg,#4ade80,#06b6d4)",borderRadius:4}}/></div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Payout history timeline */}
-                  {payoutTxs.length>0&&(
-                    <div className="card">
-                      <div style={{fontSize:15,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>Payout History</div>
-                      <div style={{fontSize:12,color:"#4a5568",marginBottom:16}}>Every withdrawal, newest first</div>
-                      <div style={{display:"flex",flexDirection:"column",gap:0}}>
-                        {payoutTxs.map((tx,i)=>{
-                          const amt=parseFloat(tx.amount)||0;
-                          const isLatest=i===0;
-                          const runningTotal=payoutTxs.slice(i).reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
-                          return(
-                            <div key={tx.id} style={{display:"flex",gap:16,padding:"14px 0",borderBottom:i<payoutTxs.length-1?"1px solid rgba(148,163,184,0.06)":"none"}}>
-                              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:0,minWidth:20}}>
-                                <div style={{width:10,height:10,borderRadius:"50%",background:isLatest?"#4ade80":"#16a34a",border:`2px solid ${isLatest?"rgba(74,222,128,0.4)":"rgba(22,163,74,0.3)"}`,marginTop:4,flexShrink:0}}/>
-                                {i<payoutTxs.length-1&&<div style={{width:1,flex:1,background:"rgba(148,163,184,0.06)",marginTop:4}}/>}
-                              </div>
-                              <div style={{flex:1,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                                <div>
-                                  <div style={{fontSize:13,fontWeight:500,color:"#e2e8f0",marginBottom:2}}>{tx.firm||"Prop Firm"}</div>
-                                  <div style={{fontSize:11,color:"#4a5568"}}>{tx.date}{tx.notes&&` · ${tx.notes}`}</div>
-                                  {tx.accountId&&<div style={{fontSize:10,color:"#334155",marginTop:2}}>{accounts.find(a=>a.id===tx.accountId)?.name||""}</div>}
-                                </div>
-                                <div style={{textAlign:"right"}}>
-                                  <div className="mono" style={{fontSize:17,fontWeight:600,color:"#4ade80"}}>{fmt$(amt)}</div>
-                                  <div style={{fontSize:10,color:"#334155",marginTop:2}}>cumulative: {fmt$(runningTotal)}</div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          );
-        })()}
       </div>
 
       {/* ─── EXPANDED SCREENSHOT ─── */}
