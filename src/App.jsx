@@ -769,76 +769,14 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  // Convert HH:MM time string to minutes since midnight
-  const timeToMins = t => { if(!t)return null; const [h,m]=t.split(":").map(Number); return h*60+m; };
-
   const confirmTradovateImport=()=>{
     const selectedIds=Object.keys(importAccountMults).filter(id=>importAccountMults[id]>0);
     if(!importPreview||!selectedIds.length){showToast("Select at least one account","warn");return;}
+    const existing=new Set(trades.map(t=>`${t.date}${t.time}${t.entry}`));
     const mults=Object.fromEntries(selectedIds.map(id=>[id,importAccountMults[id]||1]));
-
-    // Check if incoming trade matches an existing trade (same day, direction, asset, within 30s)
-    const MERGE_WINDOW = 0.5; // 30 seconds = 0.5 minutes
-    const isSimilar = (a, b) => {
-      if(a.date !== b.date) return false;
-      if(a.bias !== b.bias) return false;
-      if((a.asset||"MNQ") !== (b.asset||"MNQ")) return false;
-      const tA = timeToMins(a.time), tB = timeToMins(b.time);
-      if(tA===null||tB===null) return false;
-      return Math.abs(tA - tB) <= MERGE_WINDOW;
-    };
-
-    const avg = (...vals) => vals.filter(v=>v!=null&&!isNaN(v)).reduce((s,v)=>s+v,0) / (vals.filter(v=>v!=null&&!isNaN(v)).length||1);
-
-    const mergeTrade = (existing, incoming, incomingMults) => {
-      const avgEntry = avg(parseFloat(existing.entry), parseFloat(incoming.entry));
-      const avgExit  = avg(parseFloat(existing.exit),  parseFloat(incoming.exit));
-      const avgPnl   = avg(parseFloat(existing.pnl),   parseFloat(incoming.pnl));
-      const mergedAccountIds = [...new Set([...(existing.accountIds||[]), ...Object.keys(incomingMults)])];
-      const mergedMults = { ...(existing.accountMultipliers||{}), ...incomingMults };
-      const mergedPnl = avgPnl.toFixed(2);
-      return { ...existing, entry:avgEntry.toFixed(2), exit:avgExit.toFixed(2), pnl:mergedPnl, rr:(avgPnl/250).toFixed(2), accountIds:mergedAccountIds, accountMultipliers:mergedMults, outcome:avgPnl>250*BE_TOLERANCE?"Win":avgPnl<-250*BE_TOLERANCE?"Loss":"Breakeven" };
-    };
-
-    let mergedCount = 0;
-    let newCount = 0;
-
-    setTrades(prev => {
-      let updated = [...prev];
-      const toAdd = [];
-
-      importPreview.forEach(incoming => {
-        // Try to find a matching existing trade to merge into
-        const matchIdx = updated.findIndex(ex => isSimilar(ex, incoming));
-        if(matchIdx !== -1) {
-          // Check if these accounts are already linked (avoid double-merge)
-          const alreadyLinked = selectedIds.every(id => (updated[matchIdx].accountIds||[]).includes(id));
-          if(!alreadyLinked) {
-            updated[matchIdx] = mergeTrade(updated[matchIdx], incoming, mults);
-            mergedCount++;
-          }
-        } else {
-          // Check if it matches anything already in toAdd (same import, two accounts)
-          const pendingIdx = toAdd.findIndex(ex => isSimilar(ex, incoming));
-          if(pendingIdx !== -1) {
-            toAdd[pendingIdx] = mergeTrade(toAdd[pendingIdx], incoming, mults);
-            mergedCount++;
-          } else {
-            toAdd.push({...incoming, id:Date.now()+Math.random(), accountIds:selectedIds, accountMultipliers:mults, risk:"250", rr:((parseFloat(incoming.pnl)||0)/250).toFixed(2)});
-            newCount++;
-          }
-        }
-      });
-
-      return [...updated, ...toAdd];
-    });
-
-    setShowImportModal(false);
-    setImportPreview(null);
-    const parts = [];
-    if(newCount) parts.push(`${newCount} new trade${newCount!==1?"s":""}`);
-    if(mergedCount) parts.push(`${mergedCount} merged`);
-    showToast(`Imported: ${parts.join(", ")}`);
+    const newTrades=importPreview.filter(t=>!existing.has(`${t.date}${t.time}${t.entry}`)).map(t=>{const pnl=parseFloat(t.pnl)||0;return{...t,id:Date.now()+Math.random(),accountIds:selectedIds,accountMultipliers:mults,risk:"250",rr:(pnl/250).toFixed(2)};});
+    setTrades(prev=>[...prev,...newTrades]);setShowImportModal(false);setImportPreview(null);
+    showToast(`Imported ${newTrades.length} trades`);
   };
 
   const handleSubmit=()=>{
