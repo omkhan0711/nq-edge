@@ -375,6 +375,8 @@ export default function App() {
   const [adjustmentForm, setAdjustmentForm] = useState(EMPTY_ADJUSTMENT);
   const [showAdjustmentForm, setShowAdjustmentForm] = useState(null);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(null);
+  const [analyseLoading, setAnalyseLoading] = useState(false);
+  const [analyseReport, setAnalyseReport] = useState("");
   const fileRef = useRef();
   const tvRef = useRef();
 
@@ -918,7 +920,7 @@ export default function App() {
             <div style={{fontSize:11,color:"#334155",marginLeft:4,paddingLeft:12,borderLeft:"1px solid rgba(148,163,184,0.08)"}}>NQ · ICT · IFVG</div>
           </div>
           <div style={{display:"flex",gap:2,background:"rgba(15,23,35,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:12,padding:4,backdropFilter:"blur(8px)"}}>
-            {["dashboard","accounts","journal","analytics","screenshots","financials"].map(v=>(
+            {["dashboard","accounts","journal","analytics","screenshots","financials","payouts"].map(v=>(
               <button key={v} className={`nav-tab ${view===v?"nav-active":"nav-inactive"}`} onClick={()=>setView(v)} style={{textTransform:"capitalize"}}>{v}</button>
             ))}
           </div>
@@ -1003,6 +1005,82 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+
+                {/* Trading Score Gauge */}
+                {(()=>{
+                  const s = activeStats;
+                  if(!s) return null;
+                  const pf = Math.min(s.profitFactor===999?3:s.profitFactor,3);
+                  const wlRatio = s.losses>0?s.wins/s.losses:s.wins>0?3:0;
+                  const ddPct = s.maxDD&&s.totalPnl?Math.max(0,1-(s.maxDD/(Math.abs(s.totalPnl)||1))):1;
+                  const recov = s.maxDD>0?(s.totalPnl/s.maxDD):s.totalPnl>0?3:0;
+                  const days = Object.values(s.dayMap||{});
+                  const profDays = days.filter(d=>d.pnl>0).length;
+                  const consistency = days.length>0?profDays/days.length:0;
+                  const pillars = [
+                    {label:"Profit Factor", weight:0.22, raw:Math.min(pf/3,1)},
+                    {label:"Win/Loss Ratio", weight:0.20, raw:Math.min(wlRatio/3,1)},
+                    {label:"Max Drawdown", weight:0.18, raw:Math.max(0,Math.min(ddPct,1))},
+                    {label:"Win Rate", weight:0.15, raw:Math.min((s.winRate||0)/100,1)},
+                    {label:"Recovery Factor", weight:0.10, raw:Math.max(0,Math.min(recov/3,1))},
+                    {label:"Consistency", weight:0.08, raw:consistency},
+                    {label:"Plan Adherence", weight:0.07, raw:Math.min((s.followedPlanRate||0)/100,1)},
+                  ];
+                  const score = Math.round(pillars.reduce((acc,p)=>acc+p.raw*p.weight,0)*100);
+                  const grade = score>=85?"A+":score>=75?"A":score>=65?"B+":score>=55?"B":score>=45?"C+":"C";
+                  const gradeColor = score>=75?"#4ade80":score>=55?"#fbbf24":"#f87171";
+                  // analyseLoading and analyseReport are top-level state
+                  const radius=70, cx=90, cy=90, sweep=Math.PI;
+                  const angleToXY=(a)=>({x:cx+radius*Math.cos(a),y:cy+radius*Math.sin(a)});
+                  const startAngle=Math.PI, endAngle=2*Math.PI;
+                  const scoreAngle=startAngle+(score/100)*sweep;
+                  const trackPath=`M ${angleToXY(startAngle).x} ${angleToXY(startAngle).y} A ${radius} ${radius} 0 0 1 ${angleToXY(endAngle).x} ${angleToXY(endAngle).y}`;
+                  const fillPath=`M ${angleToXY(startAngle).x} ${angleToXY(startAngle).y} A ${radius} ${radius} 0 ${score>50?1:0} 1 ${angleToXY(scoreAngle).x} ${angleToXY(scoreAngle).y}`;
+                  return(
+                    <div className="card" style={{marginBottom:20,display:"grid",gridTemplateColumns:"220px 1fr",gap:24,alignItems:"center"}}>
+                      <div style={{textAlign:"center"}}>
+                        <div style={{fontSize:11,color:"#4a5568",letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600,marginBottom:8}}>Trading Score</div>
+                        <svg width="180" height="100" viewBox="0 0 180 100" style={{display:"block",margin:"0 auto"}}>
+                          <path d={trackPath} fill="none" stroke="rgba(148,163,184,0.08)" strokeWidth="12" strokeLinecap="round"/>
+                          <path d={fillPath} fill="none" stroke={gradeColor} strokeWidth="12" strokeLinecap="round"/>
+                          <text x={cx} y={cy-8} textAnchor="middle" fontSize="28" fontWeight="700" fill={gradeColor} fontFamily="'DM Mono',monospace">{score}</text>
+                          <text x={cx} y={cy+12} textAnchor="middle" fontSize="16" fontWeight="600" fill={gradeColor} fontFamily="'DM Sans',sans-serif">{grade}</text>
+                        </svg>
+                        <button onClick={async()=>{
+                          setAnalyseLoading(true); setAnalyseReport("");
+                          try {
+                            const prompt=`Trading Score Analysis:\nScore: ${score}/100 (${grade})\n${pillars.map(p=>`${p.label}: ${(p.raw*100).toFixed(0)}% (weight ${(p.weight*100).toFixed(0)}%)`).join("\n")}\n\nOverall stats: Win Rate ${(s.winRate||0).toFixed(1)}%, Profit Factor ${s.profitFactor===999?"∞":s.profitFactor.toFixed(2)}, Avg R:R ${(s.avgRR||0).toFixed(2)}, Max DD $${(s.maxDD||0).toFixed(0)}, Plan Adherence ${(s.followedPlanRate||0).toFixed(0)}%\n\nProvide a structured coaching report with:\n## Overall Assessment\n## Strengths\n## Priority Improvements\n## Score Roadmap\nBe specific, data-driven, under 300 words.`;
+                            const r=await callClaude([{role:"user",content:prompt}],"You are an elite prop trading coach. Be direct and specific.",2048);
+                            setAnalyseReport(r);
+                          } catch(e){setAnalyseReport("Error: "+e.message);}
+                          setAnalyseLoading(false);
+                        }} disabled={analyseLoading} className="btn btn-ghost btn-sm" style={{color:"#38bdf8",borderColor:"rgba(56,189,248,0.2)",fontSize:11,marginTop:4}}>
+                          {analyseLoading?"Analysing...":"✦ Analyse Score"}
+                        </button>
+                      </div>
+                      <div>
+                        {pillars.map(p=>(
+                          <div key={p.label} style={{marginBottom:8,display:"grid",gridTemplateColumns:"130px 1fr 36px",gap:8,alignItems:"center"}}>
+                            <div style={{fontSize:11,color:"#4a5568",fontWeight:500}}>{p.label}</div>
+                            <div className="bar-bg" style={{height:4}}><div style={{width:`${p.raw*100}%`,height:"100%",background:p.raw>=0.7?"#4ade80":p.raw>=0.4?"#fbbf24":"#f87171",borderRadius:3,transition:"width 0.5s ease"}}/></div>
+                            <div className="mono" style={{fontSize:11,color:"#64748b",textAlign:"right"}}>{(p.raw*100).toFixed(0)}%</div>
+                          </div>
+                        ))}
+                        {analyseReport&&(
+                          <div style={{marginTop:12,borderTop:"1px solid rgba(148,163,184,0.06)",paddingTop:12,fontSize:12,color:"#94a3b8",lineHeight:1.7,maxHeight:200,overflowY:"auto"}}>
+                            {analyseReport.split("\n").map((line,i)=>{
+                              if(line.startsWith("## ")) return <div key={i} style={{fontSize:12,fontWeight:700,color:"#38bdf8",marginTop:i===0?0:10,marginBottom:3}}>{line.replace("## ","")}</div>;
+                              if(line.startsWith("- ")) return <div key={i} style={{paddingLeft:12,marginBottom:2,color:"#94a3b8"}}><span style={{color:"#38bdf8",marginRight:4}}>·</span>{line.replace("- ","")}</div>;
+                              if(!line.trim()) return <div key={i} style={{height:4}}/>;
+                              return <div key={i} style={{marginBottom:2}}>{line}</div>;
+                            })}
+                            <button onClick={()=>setAnalyseReport("")} style={{marginTop:8,fontSize:11,color:"#4a5568",background:"none",border:"none",cursor:"pointer",padding:0}}>Dismiss</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Portfolio Summary */}
                 {(()=>{
@@ -1100,13 +1178,17 @@ export default function App() {
                     const mLosses=mt.reduce((s,[,d])=>s+d.losses,0);
                     const mWR=mWins+mLosses>0?(mWins/(mWins+mLosses))*100:0;
                     return(
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:20}}>
-                        {[["Month P&L",fmt$(mPnl),mPnl>=0?"#4ade80":"#f87171"],["Trades",mTrades,"#e2e8f0"],["Win Rate",`${mWR.toFixed(0)}%`,mWR>=50?"#4ade80":"#f87171"],["Trading Days",mt.length,"#93c5fd"]].map(([l,v,c])=>(
-                          <div key={l} style={{background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8,padding:"14px 16px"}}>
-                            <div className="section-title" style={{marginBottom:8}}>{l}</div>
-                            <div className="mono" style={{fontSize:20,fontWeight:500,color:c}}>{v}</div>
-                          </div>
-                        ))}
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:20}}>
+                        {(()=>{
+                          const totalCap=accountStats.filter(a=>!a.dormant).reduce((s,a)=>s+a.startBal,0);
+                          const mPct=totalCap>0?(mPnl/totalCap)*100:0;
+                          return [["Month P&L",fmt$(mPnl),mPnl>=0?"#4ade80":"#f87171"],["Month %",`${mPct>=0?"+":""}${mPct.toFixed(2)}%`,mPct>=0?"#4ade80":"#f87171"],["Trades",mTrades,"#e2e8f0"],["Win Rate",`${mWR.toFixed(0)}%`,mWR>=50?"#4ade80":"#f87171"],["Trading Days",mt.length,"#93c5fd"]].map(([l,v,c])=>(
+                            <div key={l} style={{background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:8,padding:"14px 16px"}}>
+                              <div className="section-title" style={{marginBottom:8}}>{l}</div>
+                              <div className="mono" style={{fontSize:20,fontWeight:500,color:c}}>{v}</div>
+                            </div>
+                          ));
+                        })()}
                       </div>
                     );
                   })()}
@@ -1146,6 +1228,40 @@ export default function App() {
                       );
                     })}
                   </div>
+
+                  {/* Weekly lump sum */}
+                  {(()=>{
+                    const weeks=[];
+                    const mt=Object.entries(calDayMap).filter(([date])=>{const[y,m]=date.split("-").map(Number);return y===calMonth.y&&m-1===calMonth.m;});
+                    const sorted=[...mt].sort((a,b)=>a[0].localeCompare(b[0]));
+                    sorted.forEach(([date,d])=>{
+                      const dow=new Date(date+"T12:00:00").getDay();
+                      const weekStart=new Date(date+"T12:00:00");weekStart.setDate(weekStart.getDate()-dow);
+                      const wk=weekStart.toISOString().split("T")[0];
+                      const existing=weeks.find(w=>w.key===wk);
+                      if(existing){existing.pnl+=d.pnl;existing.count+=d.count;existing.wins+=d.wins;existing.losses+=d.losses;}
+                      else weeks.push({key:wk,pnl:d.pnl,count:d.count,wins:d.wins,losses:d.losses});
+                    });
+                    if(!weeks.length)return null;
+                    return(
+                      <div style={{marginTop:16,borderTop:"1px solid rgba(148,163,184,0.06)",paddingTop:16}}>
+                        <div className="section-title" style={{marginBottom:10}}>Weekly Summary</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                          {weeks.map(w=>{
+                            const wr=w.wins+w.losses>0?(w.wins/(w.wins+w.losses))*100:0;
+                            return(
+                              <div key={w.key} style={{display:"grid",gridTemplateColumns:"120px 1fr 80px 80px",gap:10,alignItems:"center",padding:"10px 14px",background:"rgba(10,16,24,0.5)",border:"1px solid rgba(148,163,184,0.06)",borderRadius:7}}>
+                                <div style={{fontSize:11,color:"#4a5568"}}>Week of {w.key}</div>
+                                <div style={{display:"flex",gap:12,fontSize:11,color:"#334155"}}><span>{w.count} trades</span><span>{w.wins}W {w.losses}L</span></div>
+                                <div style={{fontSize:11,color:wr>=50?"#4ade80":"#f87171",textAlign:"right"}}>{wr.toFixed(0)}% WR</div>
+                                <div className="mono" style={{fontSize:13,fontWeight:500,color:w.pnl>=0?"#4ade80":"#f87171",textAlign:"right"}}>{fmt$(w.pnl)}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </>
             )}
@@ -1161,6 +1277,7 @@ export default function App() {
                 <div className="page-sub">{activeAccounts.length} active · {accounts.filter(a=>a.dormant).length} dormant</div>
               </div>
               <div style={{display:"flex",gap:8}}>
+                <button className={`btn btn-ghost btn-sm`} onClick={()=>setCompactAccounts(p=>!p)}>{compactAccounts?"Full View":"Compact"}</button>
                 <button className={`btn btn-ghost btn-sm`} onClick={()=>setShowDormant(p=>!p)}>{showDormant?"Hide Dormant":"Show Dormant"}</button>
                 <button className="btn btn-primary btn-sm" onClick={()=>{setEditAccountIdx(null);setAccountForm(EMPTY_ACCOUNT);setShowAccountForm(true);}}>+ Add Account</button>
               </div>
@@ -1171,7 +1288,33 @@ export default function App() {
                 <button className="btn btn-primary" onClick={()=>setShowAccountForm(true)} style={{padding:"10px 24px"}}>Add First Account</button>
               </div>
             ):(
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
+              compactAccounts?(
+                <div className="card" style={{padding:0,overflow:"hidden"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                    <thead>
+                      <tr style={{borderBottom:"1px solid rgba(148,163,184,0.06)"}}>
+                        {["Account","Firm","Phase","Balance","Gain %","Win Rate","Trades","Drawdown"].map(h=>(
+                          <th key={h} style={{padding:"12px 16px",textAlign:"left",fontSize:10,color:"#334155",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {accountStats.filter(a=>showDormant||!a.dormant).sort((a,b)=>a.name.localeCompare(b.name)).map(a=>(
+                        <tr key={a.id} style={{borderBottom:"1px solid rgba(148,163,184,0.04)",opacity:a.dormant?0.5:1}}>
+                          <td style={{padding:"10px 16px",color:"#e2e8f0",fontWeight:500}}>{a.name}{a.dormant&&<span style={{marginLeft:6,fontSize:10,color:"#fbbf24"}}>(dormant)</span>}</td>
+                          <td style={{padding:"10px 16px",color:"#4a5568"}}>{a.firm||"—"}</td>
+                          <td style={{padding:"10px 16px",color:"#7dd3fc"}}>{a.phase}</td>
+                          <td style={{padding:"10px 16px"}}><span className="mono" style={{color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span></td>
+                          <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.currentBalancePct>=0?"#4ade80":"#f87171"}}>{a.currentBalancePct>=0?"+":""}{a.currentBalancePct.toFixed(2)}%</span></td>
+                          <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.stats?.winRate>=50?"#4ade80":"#f87171"}}>{a.stats?`${a.stats.winRate.toFixed(0)}%`:"—"}</span></td>
+                          <td style={{padding:"10px 16px",color:"#64748b"}}>{a.tradeCount}</td>
+                          <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.ddPct>8?"#f87171":a.ddPct>5?"#fbbf24":"#4ade80"}}>{a.ddPct.toFixed(1)}%</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ):(
                 {accountStats.filter(a=>showDormant||!a.dormant).sort((a,b)=>a.name.localeCompare(b.name)).map((a)=>{
                   const realIdx=accounts.findIndex(ac=>ac.id===a.id);
                   return(
@@ -1225,11 +1368,10 @@ export default function App() {
                   );
                 })}
               </div>
+              )
             )}
           </div>
         )}
-
-        {/* ─── JOURNAL ─── */}
         {view==="journal"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:24}}>
@@ -2073,6 +2215,155 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ─── PAYOUTS ─── */}
+        {view==="payouts"&&(
+          <div>
+            <div style={{marginBottom:24}}>
+              <div className="page-title">Payouts</div>
+              <div className="page-sub">Payout history and cumulative performance</div>
+            </div>
+            {(()=>{
+              const payoutTxs = [...transactions].filter(t=>t.type==="payout").sort((a,b)=>new Date(a.date)-new Date(b.date));
+              const expenseTxs = transactions.filter(t=>isExpenseTx(t));
+              const totalPayouts = payoutTxs.reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+              const totalExpenses = expenseTxs.reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+              const net = totalPayouts - totalExpenses;
+              const payoutCount = payoutTxs.length;
+              const avgPayout = payoutCount ? totalPayouts/payoutCount : 0;
+
+              // Monthly bar chart data
+              const monthMap = {};
+              payoutTxs.forEach(tx=>{
+                const [y,m] = tx.date.split("-").map(Number);
+                const key = `${y}-${String(m).padStart(2,"0")}`;
+                if(!monthMap[key]) monthMap[key]={key,payouts:0,expenses:0};
+                monthMap[key].payouts += parseFloat(tx.amount)||0;
+              });
+              expenseTxs.forEach(tx=>{
+                const [y,m] = tx.date.split("-").map(Number);
+                const key = `${y}-${String(m).padStart(2,"0")}`;
+                if(!monthMap[key]) monthMap[key]={key,payouts:0,expenses:0};
+                monthMap[key].expenses += parseFloat(tx.amount)||0;
+              });
+              const months = Object.values(monthMap).sort((a,b)=>a.key.localeCompare(b.key));
+              const maxBar = Math.max(...months.map(m=>Math.max(m.payouts,m.expenses)),1);
+
+              // Firm breakdown
+              const firmMap = {};
+              payoutTxs.forEach(tx=>{
+                const firm = tx.firm||(tx.accountId?accounts.find(a=>a.id===tx.accountId)?.firm:"")||"Unknown";
+                if(!firmMap[firm]) firmMap[firm]={firm,payouts:0,count:0};
+                firmMap[firm].payouts += parseFloat(tx.amount)||0;
+                firmMap[firm].count++;
+              });
+              const firms = Object.values(firmMap).sort((a,b)=>b.payouts-a.payouts);
+
+              // Cumulative SVG chart
+              const cumulativePoints = [];
+              let cumPayout=0, cumExpense=0;
+              const allTxsSorted = [...transactions].filter(t=>t.type==="payout"||isExpenseTx(t)).sort((a,b)=>new Date(a.date)-new Date(b.date));
+              allTxsSorted.forEach((tx,i)=>{
+                if(tx.type==="payout") cumPayout += parseFloat(tx.amount)||0;
+                else cumExpense += parseFloat(tx.amount)||0;
+                cumulativePoints.push({i:allTxsSorted.length===1?0:i/(allTxsSorted.length-1),payout:cumPayout,expense:cumExpense,net:cumPayout-cumExpense});
+              });
+              const maxCum = Math.max(...cumulativePoints.map(p=>Math.max(p.payout,p.expense,p.net)),1);
+              const toSVG = (val) => 80 - (val/maxCum)*70;
+              const ptPath = (field) => cumulativePoints.length<2?"":cumulativePoints.map((p,i)=>`${i===0?"M":"L"}${p.i*380},${toSVG(p[field])}`).join(" ");
+
+              return(
+                <>
+                  {/* Hero stats */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+                    {[["Total Payouts",fmt$(totalPayouts),"#4ade80"],["Total Fees",fmt$(totalExpenses),"#f87171"],["Net Profit",fmt$(net),net>=0?"#4ade80":"#f87171"],["Avg Payout",fmt$(avgPayout),"#7dd3fc"]].map(([l,v,c])=>(
+                      <div key={l} className="card" style={{padding:24}}>
+                        <div className="section-title" style={{marginBottom:10}}>{l}</div>
+                        <div className="mono" style={{fontSize:28,fontWeight:500,color:c}}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Monthly bar chart */}
+                  {months.length>0&&(
+                    <div className="card" style={{marginBottom:16,padding:24}}>
+                      <div style={{fontSize:14,fontWeight:600,color:"#e2e8f0",marginBottom:20}}>Monthly Payouts vs Fees</div>
+                      <div style={{display:"flex",gap:4,alignItems:"flex-end",height:140,overflowX:"auto"}}>
+                        {months.map(m=>(
+                          <div key={m.key} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:52,flex:1}}>
+                            <div style={{display:"flex",gap:2,alignItems:"flex-end",height:100}}>
+                              <div title={`Payouts: ${fmt$(m.payouts)}`} style={{width:18,background:"rgba(74,222,128,0.5)",border:"1px solid rgba(74,222,128,0.3)",borderRadius:"3px 3px 0 0",height:`${(m.payouts/maxBar)*100}%`,minHeight:m.payouts>0?4:0,transition:"height 0.4s"}}/>
+                              <div title={`Fees: ${fmt$(m.expenses)}`} style={{width:18,background:"rgba(248,113,113,0.5)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:"3px 3px 0 0",height:`${(m.expenses/maxBar)*100}%`,minHeight:m.expenses>0?4:0,transition:"height 0.4s"}}/>
+                            </div>
+                            <div style={{fontSize:9,color:"#334155",textAlign:"center",whiteSpace:"nowrap"}}>{m.key.slice(0,7)}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{display:"flex",gap:16,marginTop:12,fontSize:11,color:"#4a5568"}}>
+                        <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:10,height:10,background:"rgba(74,222,128,0.5)",borderRadius:2,display:"inline-block"}}/> Payouts</span>
+                        <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:10,height:10,background:"rgba(248,113,113,0.5)",borderRadius:2,display:"inline-block"}}/> Fees</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+                    {/* Firm breakdown */}
+                    <div className="card" style={{padding:24}}>
+                      <div style={{fontSize:14,fontWeight:600,color:"#e2e8f0",marginBottom:16}}>By Prop Firm</div>
+                      {!firms.length?<div style={{color:"#334155",fontSize:13}}>No payout data</div>:firms.map(f=>(
+                        <div key={f.firm} style={{marginBottom:12,paddingBottom:12,borderBottom:"1px solid rgba(148,163,184,0.06)"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                            <div style={{fontSize:13,color:"#e2e8f0",fontWeight:500}}>{f.firm}</div>
+                            <div className="mono" style={{fontSize:15,fontWeight:500,color:"#4ade80"}}>{fmt$(f.payouts)}</div>
+                          </div>
+                          <div style={{fontSize:11,color:"#4a5568"}}>{f.count} payout{f.count!==1?"s":""}</div>
+                          <div className="bar-bg" style={{height:3,marginTop:6}}><div style={{width:`${(f.payouts/totalPayouts)*100}%`,height:"100%",background:"#4ade80",borderRadius:3}}/></div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Cumulative chart */}
+                    <div className="card" style={{padding:24}}>
+                      <div style={{fontSize:14,fontWeight:600,color:"#e2e8f0",marginBottom:16}}>Cumulative P&L</div>
+                      {cumulativePoints.length<2?<div style={{color:"#334155",fontSize:13,padding:"40px 0",textAlign:"center"}}>Add more transactions to see chart</div>:(
+                        <svg width="100%" viewBox="0 0 380 90" preserveAspectRatio="none" style={{height:120,display:"block"}}>
+                          <path d={ptPath("payout")} fill="none" stroke="rgba(74,222,128,0.7)" strokeWidth="1.5" strokeLinecap="round"/>
+                          <path d={ptPath("expense")} fill="none" stroke="rgba(248,113,113,0.7)" strokeWidth="1.5" strokeLinecap="round"/>
+                          <path d={ptPath("net")} fill="none" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                      )}
+                      <div style={{display:"flex",gap:16,marginTop:8,fontSize:11,color:"#4a5568"}}>
+                        <span style={{color:"rgba(74,222,128,0.9)"}}>─ Payouts</span>
+                        <span style={{color:"rgba(248,113,113,0.9)"}}>─ Fees</span>
+                        <span style={{color:"#38bdf8"}}>─ Net</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payout history */}
+                  <div className="card" style={{padding:24}}>
+                    <div style={{fontSize:14,fontWeight:600,color:"#e2e8f0",marginBottom:16}}>Payout History</div>
+                    {!payoutTxs.length?<div style={{textAlign:"center",padding:"40px 0",color:"#334155",fontSize:13}}>No payouts logged yet — add them in the Financials tab</div>:(
+                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                        {[...payoutTxs].reverse().map(tx=>{
+                          const acc = tx.accountId?accounts.find(a=>a.id===tx.accountId):null;
+                          return(
+                            <div key={tx.id} style={{display:"grid",gridTemplateColumns:"100px 1fr 1fr 120px",gap:10,alignItems:"center",padding:"12px 16px",background:"rgba(10,16,24,0.5)",border:"1px solid rgba(74,222,128,0.1)",borderRadius:8}}>
+                              <div style={{fontSize:12,color:"#4a5568"}}>{tx.date}</div>
+                              <div style={{fontSize:13,color:"#94a3b8"}}>{acc?.name||tx.firm||"—"}</div>
+                              <div style={{fontSize:12,color:"#4a5568"}}>{tx.notes||"—"}</div>
+                              <div className="mono" style={{fontSize:16,fontWeight:600,color:"#4ade80",textAlign:"right"}}>+{fmt$(parseFloat(tx.amount)||0)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
