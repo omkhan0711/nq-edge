@@ -26,7 +26,7 @@ const DAYS_OF_WEEK = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday
 const EMPTY = { date:new Date().toISOString().split("T")[0], time:"", exitTime:"", asset:"MNQ", bias:"Bullish", biasCorrect:null, entry:"", exit:"", stopLoss:"", takeProfit:"", contracts:"1", outcome:"Win", pnl:"", rr:"", maxPotentialRR:"", risk:"250", rating:"", notes:"", emotion:"Calm", followedPlan:true, planBreakReason:"", beSaved:null, excludeFromAnalytics:false, screenshot:"", aiReview:"", accountIds:[], accountMultipliers:{}, confluences:[] };
 const PLAN_BREAK_REASONS = ["FOMO","Gambling","Revenge Trading","Over-Leveraging"];
 const EMPTY_ACCOUNT = { id:"", name:"", firm:"", size:"50000", startingBalance:"50000", maxTotalDrawdown:"10", phase:"Funded", notes:"", dormant:false, balanceAdjustment:"0" };
-const EMPTY_ADJUSTMENT = { amount:"", reason:"Data correction", date:new Date().toISOString().split("T")[0] };
+const EMPTY_ADJUSTMENT = { targetBalance:"", reason:"Data correction", date:new Date().toISOString().split("T")[0] };
 const EMPTY_TRANSACTION = { id:"", type:"challenge_fee", amount:"", date:new Date().toISOString().split("T")[0], notes:"", accountId:"", accountStatus:"", firm:"" };
 const TX_TYPES = [
   { value:"challenge_fee", label:"Challenge Fee" },
@@ -803,8 +803,11 @@ export default function App() {
   const openEditAccount=(idx)=>{setEditAccountIdx(idx);setAccountForm(accounts[idx]);setShowAccountForm(true);};
   const deleteAccount=(idx)=>{setAccounts(prev=>prev.filter((_,i)=>i!==idx));setConfirmDeleteAccount(null);showToast("Account removed","warn");};
   const submitAdjustment=(accountId)=>{
-    if(!adjustmentForm.amount){showToast("Enter an amount","error");return;}
-    setBalanceAdjustments(prev=>[...prev,{...adjustmentForm,id:Date.now(),accountId}]);
+    if(adjustmentForm.targetBalance===""||isNaN(parseFloat(adjustmentForm.targetBalance))){showToast("Enter the current balance","error");return;}
+    const accStat=accountStats.find(a=>a.id===accountId);
+    const trackedBalance=accStat?accStat.currentBalance:(parseFloat(accountForm.startingBalance)||0);
+    const correction=parseFloat(adjustmentForm.targetBalance)-trackedBalance;
+    setBalanceAdjustments(prev=>[...prev,{amount:String(correction),reason:adjustmentForm.reason,date:adjustmentForm.date,id:Date.now(),accountId}]);
     setAdjustmentForm(EMPTY_ADJUSTMENT);showToast("Adjustment submitted");
   };
   const deleteAdjustment=(adjId)=>{setBalanceAdjustments(prev=>prev.filter(a=>a.id!==adjId));showToast("Adjustment removed","warn");};
@@ -2436,19 +2439,34 @@ Be specific, honest and reference the actual numbers. Under 400 words.`;
                   <label style={lbl}>Manual Balance Adjustments</label>
                   <button onClick={()=>setShowAdjustmentForm(showAdjustmentForm===accountForm.id?null:accountForm.id)} className="btn btn-ghost" style={{fontSize:10,padding:"3px 8px"}}>{showAdjustmentForm===accountForm.id?"Cancel":"+ Add"}</button>
                 </div>
-                {showAdjustmentForm===accountForm.id&&(
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,marginBottom:10,alignItems:"end"}}>
-                    <div>
-                      <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Amount ($)</div>
-                      <input type="number" value={adjustmentForm.amount} onChange={e=>setAdjustmentForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",background:"rgba(12,18,28,0.5)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="+500 or -200"/>
+                {showAdjustmentForm===accountForm.id&&(()=>{
+                  const accStat=accountStats.find(a=>a.id===accountForm.id);
+                  const trackedBalance=accStat?accStat.currentBalance:(parseFloat(accountForm.startingBalance)||0);
+                  const target=adjustmentForm.targetBalance;
+                  const hasTarget=target!==""&&!isNaN(parseFloat(target));
+                  const preview=hasTarget?parseFloat(target)-trackedBalance:null;
+                  return (
+                    <div style={{marginBottom:10}}>
+                      <div style={{fontSize:11,color:"#4a5568",marginBottom:8}}>Currently tracked balance: <span className="mono" style={{color:"#94a3b8"}}>{fmt$(trackedBalance)}</span></div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,alignItems:"end"}}>
+                        <div>
+                          <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Actual Current Balance ($)</div>
+                          <input type="number" value={target} onChange={e=>setAdjustmentForm(f=>({...f,targetBalance:e.target.value}))} style={{width:"100%",background:"rgba(12,18,28,0.5)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="e.g. 51250.00"/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Reason</div>
+                          <input value={adjustmentForm.reason} onChange={e=>setAdjustmentForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",background:"rgba(12,18,28,0.5)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="e.g. Data correction"/>
+                        </div>
+                        <button onClick={()=>submitAdjustment(accountForm.id)} className="btn btn-primary" style={{fontSize:11,padding:"7px 14px"}}>Submit</button>
+                      </div>
+                      {preview!==null&&(
+                        <div style={{fontSize:11,marginTop:8,color:preview>=0?"#4ade80":"#f87171",fontWeight:500}}>
+                          Correction to apply: {preview>=0?"+":""}{fmt$(preview)}
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <div style={{fontSize:10,color:"#4a5568",marginBottom:3}}>Reason</div>
-                      <input value={adjustmentForm.reason} onChange={e=>setAdjustmentForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",background:"rgba(12,18,28,0.5)",border:"1px solid rgba(148,163,184,0.08)",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12}} placeholder="e.g. Data correction"/>
-                    </div>
-                    <button onClick={()=>submitAdjustment(accountForm.id)} className="btn btn-primary" style={{fontSize:11,padding:"7px 14px"}}>Submit</button>
-                  </div>
-                )}
+                  );
+                })()}
                 {(()=>{const adjs=balanceAdjustments.filter(a=>a.accountId===accountForm.id);return adjs.length>0?(
                   <div style={{maxHeight:150,overflowY:"auto"}}>
                     {adjs.sort((x,y)=>y.id-x.id).map(adj=>(
