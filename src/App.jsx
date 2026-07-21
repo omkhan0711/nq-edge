@@ -18,6 +18,7 @@ const COMMISSIONS = { MNQ:0.52, NQ:1.55, MES:0.52, ES:1.55 };
 const DEFAULT_CONFLUENCES = ["IFVG","SMT","Liquidity Sweep","5-minute FVG Delivery","15-minute FVG Delivery","1-hour FVG Delivery","4-hour FVG Delivery","Order Block","Judas Swing","Premium/Discount","Macro"];
 const DEFAULT_FIRMS = ["Funded Trading Plus","Apex Trader Funding","TopStep"];
 const BE_TOLERANCE = 0.20;
+const ACCOUNT_BUFFER = 52000;
 const TIME_SLOTS = [];
 for (let h=9;h<=10;h++) for (let m=0;m<60;m+=5) { if(h===10&&m>30)break; TIME_SLOTS.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`); }
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -596,7 +597,8 @@ export default function App() {
     const totalProfit=pnl+balAdj;
     const totalProfitPct=(totalProfit/startBal)*100;
     const currentBalancePct=((currentBalanceAdj-startBal)/startBal)*100;
-    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj,adjustments:accAdjs,totalProfit,totalProfitPct,currentBalancePct};
+    const profitAboveBuffer=currentBalanceAdj-ACCOUNT_BUFFER;
+    return{...acc,stats:s,pnl,currentBalance:currentBalanceAdj,startBal,gainPct,ddPct,ddLimit:parseFloat(acc.maxTotalDrawdown)||10,tradeCount:accTrades.length,totalExpenses,totalPayouts,netReal,balAdj,adjustments:accAdjs,totalProfit,totalProfitPct,currentBalancePct,profitAboveBuffer};
   }),[accounts,trades,transactions,balanceAdjustments,computeStats]);
 
   const equityPath=useMemo(()=>{
@@ -1296,7 +1298,7 @@ export default function App() {
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                     <thead>
                       <tr style={{borderBottom:"1px solid rgba(148,163,184,0.06)"}}>
-                        {["Account","Firm","Phase","Balance","Gain %","Win Rate","Trades","Drawdown"].map(h=>(
+                        {["Account","Firm","Phase","Balance","Above Buffer","Gain %","Win Rate","Trades","Drawdown"].map(h=>(
                           <th key={h} style={{padding:"12px 16px",textAlign:"left",fontSize:10,color:"#334155",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600}}>{h}</th>
                         ))}
                       </tr>
@@ -1308,6 +1310,7 @@ export default function App() {
                           <td style={{padding:"10px 16px",color:"#4a5568"}}>{a.firm||"—"}</td>
                           <td style={{padding:"10px 16px",color:"#7dd3fc"}}>{a.phase}</td>
                           <td style={{padding:"10px 16px"}}><span className="mono" style={{color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span></td>
+                          <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.profitAboveBuffer>=0?"#4ade80":"#f87171"}}>{a.profitAboveBuffer>=0?"+":"-"}${Math.abs(a.profitAboveBuffer).toLocaleString(undefined,{maximumFractionDigits:0})}</span></td>
                           <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.currentBalancePct>=0?"#4ade80":"#f87171"}}>{a.currentBalancePct>=0?"+":""}{a.currentBalancePct.toFixed(2)}%</span></td>
                           <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.stats?.winRate>=50?"#4ade80":"#f87171"}}>{a.stats?`${a.stats.winRate.toFixed(0)}%`:"—"}</span></td>
                           <td style={{padding:"10px 16px",color:"#64748b"}}>{a.tradeCount}</td>
