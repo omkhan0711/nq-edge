@@ -1294,32 +1294,46 @@ export default function App() {
               </div>
             ):(
               compactAccounts?(
-                <div className="card" style={{padding:0,overflow:"hidden"}}>
-                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                    <thead>
-                      <tr style={{borderBottom:"1px solid rgba(148,163,184,0.06)"}}>
-                        {["Account","Firm","Phase","Balance","Above Buffer","Gain %","Win Rate","Trades","Drawdown"].map(h=>(
-                          <th key={h} style={{padding:"12px 16px",textAlign:"left",fontSize:10,color:"#334155",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600}}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {accountStats.filter(a=>showDormant||!a.dormant).sort((a,b)=>a.name.localeCompare(b.name)).map(a=>(
-                        <tr key={a.id} style={{borderBottom:"1px solid rgba(148,163,184,0.04)",opacity:a.dormant?0.5:1}}>
-                          <td style={{padding:"10px 16px",color:"#e2e8f0",fontWeight:500}}>{a.name}{a.dormant&&<span style={{marginLeft:6,fontSize:10,color:"#fbbf24"}}>(dormant)</span>}</td>
-                          <td style={{padding:"10px 16px",color:"#4a5568"}}>{a.firm||"—"}</td>
-                          <td style={{padding:"10px 16px",color:"#7dd3fc"}}>{a.phase}</td>
-                          <td style={{padding:"10px 16px"}}><span className="mono" style={{color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span></td>
-                          <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.profitAboveBuffer>=0?"#4ade80":"#f87171"}}>{a.profitAboveBuffer>=0?"+":"-"}${Math.abs(a.profitAboveBuffer).toLocaleString(undefined,{maximumFractionDigits:0})}</span></td>
-                          <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.currentBalancePct>=0?"#4ade80":"#f87171"}}>{a.currentBalancePct>=0?"+":""}{a.currentBalancePct.toFixed(2)}%</span></td>
-                          <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.stats?.winRate>=50?"#4ade80":"#f87171"}}>{a.stats?`${a.stats.winRate.toFixed(0)}%`:"—"}</span></td>
-                          <td style={{padding:"10px 16px",color:"#64748b"}}>{a.tradeCount}</td>
-                          <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.ddPct>8?"#f87171":a.ddPct>5?"#fbbf24":"#4ade80"}}>{a.ddPct.toFixed(1)}%</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                (()=>{
+                  const visibleAccounts=accountStats.filter(a=>showDormant||!a.dormant).sort((a,b)=>a.name.localeCompare(b.name));
+                  const totalBalance=visibleAccounts.reduce((s,a)=>s+a.currentBalance,0);
+                  const totalAboveBuffer=visibleAccounts.reduce((s,a)=>s+a.profitAboveBuffer,0);
+                  return (
+                    <div className="card" style={{padding:0,overflow:"hidden"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                        <thead>
+                          <tr style={{borderBottom:"1px solid rgba(148,163,184,0.06)"}}>
+                            {["Account","Firm","Phase","Balance","Above Buffer","Gain %","Win Rate","Trades"].map(h=>(
+                              <th key={h} style={{padding:"12px 16px",textAlign:"left",fontSize:10,color:"#334155",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleAccounts.map(a=>(
+                            <tr key={a.id} style={{borderBottom:"1px solid rgba(148,163,184,0.04)",opacity:a.dormant?0.5:1}}>
+                              <td style={{padding:"10px 16px",color:"#e2e8f0",fontWeight:500}}>{a.name}{a.dormant&&<span style={{marginLeft:6,fontSize:10,color:"#fbbf24"}}>(dormant)</span>}</td>
+                              <td style={{padding:"10px 16px",color:"#4a5568"}}>{a.firm||"—"}</td>
+                              <td style={{padding:"10px 16px",color:"#7dd3fc"}}>{a.phase}</td>
+                              <td style={{padding:"10px 16px"}}><span className="mono" style={{color:"#e2e8f0"}}>${a.currentBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span></td>
+                              <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.profitAboveBuffer>=0?"#4ade80":"#f87171"}}>{a.profitAboveBuffer>=0?"+":"-"}${Math.abs(a.profitAboveBuffer).toLocaleString(undefined,{maximumFractionDigits:0})}</span></td>
+                              <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.currentBalancePct>=0?"#4ade80":"#f87171"}}>{a.currentBalancePct>=0?"+":""}{a.currentBalancePct.toFixed(2)}%</span></td>
+                              <td style={{padding:"10px 16px"}}><span className="mono" style={{color:a.stats?.winRate>=50?"#4ade80":"#f87171"}}>{a.stats?`${a.stats.winRate.toFixed(0)}%`:"—"}</span></td>
+                              <td style={{padding:"10px 16px",color:"#64748b"}}>{a.tradeCount}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{borderTop:"1px solid rgba(148,163,184,0.14)"}}>
+                            <td colSpan={3} style={{padding:"12px 16px",color:"#94a3b8",fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>Total ({visibleAccounts.length})</td>
+                            <td style={{padding:"12px 16px"}}><span className="mono" style={{color:"#e2e8f0",fontWeight:700}}>${totalBalance.toLocaleString(undefined,{maximumFractionDigits:0})}</span></td>
+                            <td style={{padding:"12px 16px"}}><span className="mono" style={{color:totalAboveBuffer>=0?"#4ade80":"#f87171",fontWeight:700}}>{totalAboveBuffer>=0?"+":"-"}${Math.abs(totalAboveBuffer).toLocaleString(undefined,{maximumFractionDigits:0})}</span></td>
+                            <td colSpan={3}></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  );
+                })()
               ):(
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
                 {accountStats.filter(a=>showDormant||!a.dormant).sort((a,b)=>a.name.localeCompare(b.name)).map((a)=>{
